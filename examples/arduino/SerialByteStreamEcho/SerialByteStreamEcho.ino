@@ -1,23 +1,18 @@
 #include <Arduino.h>
 #include <pypilot_event_loop.hpp>
+#include <pypilot_event_loop_arduino/arduino_serial_stream.hpp>
 
 pypilot_event_loop::EventLoop<> event_loop;
-pypilot_event_loop::StaticByteStream<64> stream;
-uint32_t bytes_read = 0;
+pypilot_event_loop::ArduinoSerialStream serial_stream(Serial);
 
 void setup() {
     Serial.begin(115200);
 
-    event_loop.on_delay(0, []() {
-        const uint8_t msg[] = {'h', 'e', 'l', 'l', 'o'};
-        stream.write(msg, sizeof(msg));
-    });
-
-    event_loop.on_repeat(1, []() {
-        uint8_t buf[16];
-        const int n = stream.read(buf, sizeof(buf));
+    event_loop.on_readable(serial_stream, []() {
+        uint8_t buf[32];
+        const int n = serial_stream.read(buf, sizeof(buf));
         if (n > 0) {
-            bytes_read += static_cast<uint32_t>(n);
+            serial_stream.write(buf, static_cast<size_t>(n));
         }
     });
 }

@@ -20,6 +20,7 @@ The core APIs expose:
 - fixed-size frame protocol readers
 - header+payload protocol readers
 - native file descriptor integration for Linux streams
+- Linux named FIFO byte streams
 - event handles for enable/disable/remove
 - static byte streams for portable tests/examples
 - static datagram streams for portable tests/examples
@@ -121,6 +122,24 @@ pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
     });
 ```
 
+## Linux FIFO streams
+
+`LinuxFifoByteStream` wraps a named FIFO as an `IByteStream`.
+
+```cpp
+pypilot_event_loop::LinuxFifoByteStream fifo("/tmp/pypilot-events.fifo");
+
+pypilot_event_loop::LineProtocolReader<256> lines(fifo, {}, [](pypilot_event_loop::LineView line) {
+    // complete FIFO line
+});
+
+event_loop.on_bytes_ready(fifo, [&]() {
+    lines.poll(event_loop.clock().micros());
+});
+```
+
+By default, the FIFO is created if missing and opened `O_RDWR | O_NONBLOCK`. This keeps the fd stable when external writers disconnect, which matters because libevent registrations are tied to a specific fd. Use separate input/output FIFOs for bidirectional IPC if the application must avoid reading its own writes.
+
 ## Event queues
 
 Normal runtime queue:
@@ -216,6 +235,7 @@ examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
 ```text
 examples/linux/line_protocol_pipe.cpp
 examples/linux/fixed_frame_pipe.cpp
+examples/linux/fifo_line_reader.cpp
 ```
 
 ## Pin event examples
@@ -259,4 +279,4 @@ arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEv
 
 ## OpenWRT note
 
-OpenWRT builds should provide libevent and libgpiod in the target SDK/toolchain. If either is missing, the Linux backend intentionally fails at configure time.
+OpenWRT builds should provide libevent and libgpiod in the target SDK/toolchain. If either is missing, the Linux backend intentionally fails at configure time. Named FIFO IPC uses normal Linux file descriptors, so it should work on OpenWRT when the selected filesystem supports FIFOs and the process has permissions for the FIFO path.

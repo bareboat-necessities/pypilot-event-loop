@@ -19,12 +19,6 @@ target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS} ${
 target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES} ${LIBGPIOD_LIBRARIES})
 target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER} ${LIBGPIOD_CFLAGS_OTHER})
 
-add_executable(test_event_queue tests/test_event_queue.cpp)
-target_link_libraries(test_event_queue PRIVATE pypilot_event_loop)
-
-add_executable(test_spsc_event_queue tests/test_spsc_event_queue.cpp)
-target_link_libraries(test_spsc_event_queue PRIVATE pypilot_event_loop)
-
 add_executable(test_timer tests/test_timer.cpp)
 target_link_libraries(test_timer PRIVATE pypilot_event_loop)
 
@@ -37,11 +31,8 @@ target_link_libraries(test_memory_stream PRIVATE pypilot_event_loop)
 add_executable(test_callback_task tests/test_callback_task.cpp)
 target_link_libraries(test_callback_task PRIVATE pypilot_event_loop)
 
-add_executable(test_pin_event_task tests/test_pin_event_task.cpp)
-target_link_libraries(test_pin_event_task PRIVATE pypilot_event_loop)
-
-add_executable(test_readable_callback tests/test_readable_callback.cpp)
-target_link_libraries(test_readable_callback PRIVATE pypilot_event_loop)
+add_executable(test_bytes_ready_callback tests/test_bytes_ready_callback.cpp)
+target_link_libraries(test_bytes_ready_callback PRIVATE pypilot_event_loop)
 
 add_executable(test_protocol_readers tests/test_protocol_readers.cpp)
 target_link_libraries(test_protocol_readers PRIVATE pypilot_event_loop)
@@ -74,14 +65,11 @@ add_executable(gpiod_pin_event examples/linux/gpiod_pin_event.cpp)
 target_link_libraries(gpiod_pin_event PRIVATE pypilot_event_loop)
 
 enable_testing()
-add_test(NAME test_event_queue COMMAND test_event_queue)
-add_test(NAME test_spsc_event_queue COMMAND test_spsc_event_queue)
 add_test(NAME test_timer COMMAND test_timer)
 add_test(NAME test_test_scheduler COMMAND test_test_scheduler)
 add_test(NAME test_memory_stream COMMAND test_memory_stream)
 add_test(NAME test_callback_task COMMAND test_callback_task)
-add_test(NAME test_pin_event_task COMMAND test_pin_event_task)
-add_test(NAME test_readable_callback COMMAND test_readable_callback)
+add_test(NAME test_bytes_ready_callback COMMAND test_bytes_ready_callback)
 add_test(NAME test_protocol_readers COMMAND test_protocol_readers)
 add_test(NAME test_linux_fifo_stream COMMAND test_linux_fifo_stream)
 add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)

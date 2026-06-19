@@ -13,6 +13,11 @@ struct TcpListenOptions {
     bool close_on_free = true;
 };
 
+struct TcpConnectOptions {
+    const char* host = "127.0.0.1";
+    uint16_t port = 0;
+};
+
 struct TcpPeerInfo {
     char host[64]{};
     uint16_t port = 0;
@@ -64,6 +69,32 @@ public:
     }
 
     virtual void on_listener_error(int error_code) {
+        (void)error_code;
+    }
+};
+
+class ITcpClientHandler {
+public:
+    virtual ~ITcpClientHandler() = default;
+
+    virtual void on_connect(ITcpConnection& connection, const TcpPeerInfo& peer) {
+        (void)connection;
+        (void)peer;
+    }
+
+    virtual void on_data(ITcpConnection& connection) {
+        (void)connection;
+    }
+
+    virtual void on_write_ready(ITcpConnection& connection) {
+        (void)connection;
+    }
+
+    virtual void on_close(ITcpConnection& connection) {
+        (void)connection;
+    }
+
+    virtual void on_error(int error_code) {
         (void)error_code;
     }
 };

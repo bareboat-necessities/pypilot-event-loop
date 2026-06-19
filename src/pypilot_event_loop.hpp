@@ -8,6 +8,7 @@
 #include "pypilot_event_loop/event.hpp"
 #include "pypilot_event_loop/event_queue.hpp"
 #include "pypilot_event_loop/spsc_event_queue.hpp"
+#include "pypilot_event_loop/event_handle.hpp"
 #include "pypilot_event_loop/byte_stream.hpp"
 #include "pypilot_event_loop/datagram_stream.hpp"
 #include "pypilot_event_loop/static_byte_stream.hpp"

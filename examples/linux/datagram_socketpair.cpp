@@ -17,15 +17,18 @@ int main() {
 
     int packets_read = 0;
 
-    event_loop.on_readable(receiver, [&]() {
+    const pypilot_event_loop::EventHandle receiver_event = event_loop.on_bytes_ready(receiver, [&]() {
         uint8_t buf[16];
         const int n = receiver.recv(buf, sizeof(buf));
         if (n > 0) {
             packets_read++;
-            std::cout << "datagram readiness read " << n << " bytes" << std::endl;
+            std::cout << "datagram data ready read " << n << " bytes" << std::endl;
             event_loop.request_exit();
         }
     });
+    if (!event_loop.valid(receiver_event)) {
+        return 2;
+    }
 
     event_loop.on_delay(0, [&]() {
         const uint8_t msg[] = {'d', 'a', 't', 'a'};

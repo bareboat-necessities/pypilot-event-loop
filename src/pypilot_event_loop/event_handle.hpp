@@ -17,6 +17,7 @@ struct EventHandle {
     uint16_t generation = 0;
 
     bool assigned() const { return slot != 0xffffu; }
+    explicit operator bool() const { return assigned(); }
 };
 
 } // namespace pypilot_event_loop

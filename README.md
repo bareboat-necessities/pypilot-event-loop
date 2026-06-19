@@ -19,6 +19,7 @@ The public API exposes:
 - TCP listener/connection interfaces
 - Linux TCP server backend using libevent listener/bufferevent/evbuffer
 - Linux named FIFO byte streams for runtime/backend code
+- native serial stream aliases for Arduino `Serial` and Linux tty devices
 - event handles for enable/disable/remove
 - `IPinEventSource`
 - Linux gpiod pin events for runtime/backend code
@@ -102,6 +103,18 @@ pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
     });
 ```
 
+## Serial line protocol example
+
+`examples/SerialLineProtocolExample/SerialLineProtocolExample.ino` is a unified Arduino/Linux example. On Arduino it wraps `Serial`. On Linux it opens a tty path with `NativeSerialStream` and uses libevent fd readiness.
+
+Linux run example:
+
+```bash
+./build/serial_line_protocol_example /dev/ttyUSB0 115200
+```
+
+Send newline-delimited messages. The example echoes each received line as `line: ...`.
+
 ## TCP server API
 
 Linux exposes `NativeTcpServer`, which wraps libevent `evconnlistener` for accepting sockets and `bufferevent`/`evbuffer` for connection I/O.
@@ -150,6 +163,7 @@ Shared Linux/Arduino examples:
 examples/EventLoopTimerExample/EventLoopTimerExample.ino
 examples/LineProtocolExample/LineProtocolExample.ino
 examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino
+examples/SerialLineProtocolExample/SerialLineProtocolExample.ino
 examples/PinEventExample/PinEventExample.ino
 ```
 
@@ -178,6 +192,7 @@ ctest --test-dir build --output-on-failure
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/EventLoopTimerExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/LineProtocolExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/FixedHeaderProtocolExample
+arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/SerialLineProtocolExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample
 ```
 

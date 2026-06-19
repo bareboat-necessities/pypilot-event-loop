@@ -5,6 +5,7 @@
 #include <event2/event.h>
 
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "pypilot_event_loop/scheduler.hpp"

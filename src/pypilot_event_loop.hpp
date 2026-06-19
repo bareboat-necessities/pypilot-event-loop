@@ -10,3 +10,4 @@
 #include "pypilot_event_loop/byte_stream.hpp"
 #include "pypilot_event_loop/datagram_stream.hpp"
 #include "pypilot_event_loop/scheduler.hpp"
+#include "pypilot_event_loop/native.hpp"

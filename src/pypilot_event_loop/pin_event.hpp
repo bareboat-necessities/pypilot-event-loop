@@ -8,28 +8,21 @@
 namespace pypilot_event_loop {
 
 /**
- * Abstract digital input pin.
+ * Abstract sampled digital input pin.
  *
- * This is intentionally not Arduino-specific. A Linux/Raspberry Pi backend can
- * later implement this interface using GPIO character devices, libgpiod, sysfs,
- * or another board-specific input source. Arduino can implement it with
- * digitalRead().
+ * Use this for cooperative pin polling, Arduino digitalRead() wrappers, and
+ * test pins. Production Linux edge events should normally use IPinEventSource
+ * instead, so the event loop can watch a file descriptor.
  */
 class IPinInput {
 public:
     virtual ~IPinInput() = default;
-
-    /** Return true when the input source can be sampled. */
     virtual bool valid() const = 0;
-
-    /** Return the current digital level. false = low, true = high. */
     virtual bool read() const = 0;
-
-    /** Optional stable identifier for logs/tests. */
     virtual uint32_t id() const = 0;
 };
 
-/** Digital pin event modes supported by PinEventTask. */
+/** Digital pin event modes. */
 enum class PinEventType : uint8_t {
     RisingEdge,
     FallingEdge,
@@ -38,15 +31,36 @@ enum class PinEventType : uint8_t {
     LowLevel
 };
 
+/** Normalized pin event record produced by IPinEventSource. */
+struct PinEvent {
+    PinEventType type = PinEventType::Change;
+    uint64_t timestamp_us = 0;
+    uint32_t source_id = 0;
+    uint32_t sequence = 0;
+    bool level = false;
+};
+
 /**
- * Polling pin-event task.
+ * Abstract edge-event source for GPIO-like inputs.
  *
- * The task samples an IPinInput each time poll() is called. When the configured
- * edge or level condition is detected, it invokes another IRuntimeTask.
+ * Linux gpiod sources return a native fd and are integrated with libevent.
+ * Arduino interrupt/cooperative sources may return -1 and are checked from
+ * tick(). read_event() must drain one pending event and return true when one
+ * was available.
+ */
+class IPinEventSource {
+public:
+    virtual ~IPinEventSource() = default;
+    virtual bool valid() const = 0;
+    virtual int native_fd() const { return -1; }
+    virtual bool read_event(PinEvent& event) = 0;
+};
+
+/**
+ * Polling pin-event task for IPinInput.
  *
- * This keeps GPIO handling portable. The event-loop backend decides when this
- * task is polled: periodically, from a platform interrupt shim, or from a
- * Linux GPIO readiness wrapper in a later backend.
+ * This is still useful for Arduino or test code when a real edge-event fd is
+ * not available. Prefer IPinEventSource for production Linux GPIO edge events.
  */
 class PinEventTask final : public IRuntimeTask {
 public:
@@ -129,12 +143,6 @@ private:
     bool has_last_ = false;
 };
 
-/**
- * Lambda-backed pin-event task.
- *
- * This is the lambda analogue of PinEventTask. It owns a fixed-storage
- * CallbackTask and forwards matching pin events to the stored callable.
- */
 template<size_t CallbackStorageSize = 48>
 class LambdaPinEventTask final : public IRuntimeTask {
 public:
@@ -147,10 +155,7 @@ public:
         callback_.set(callable);
     }
 
-    void poll(uint64_t now_us) override {
-        pin_task_.poll(now_us);
-    }
-
+    void poll(uint64_t now_us) override { pin_task_.poll(now_us); }
     PinEventTask& pin_task() { return pin_task_; }
 
 private:

@@ -61,6 +61,9 @@ target_link_libraries(test_tcp_server_shutdown PRIVATE pypilot_event_loop)
 add_executable(test_tcp_disconnect_detection tests/test_tcp_disconnect_detection.cpp)
 target_link_libraries(test_tcp_disconnect_detection PRIVATE pypilot_event_loop)
 
+add_executable(test_tcp_client_disconnect tests/test_tcp_client_disconnect.cpp)
+target_link_libraries(test_tcp_client_disconnect PRIVATE pypilot_event_loop)
+
 add_executable(test_tcp_listener_lifecycle tests/test_tcp_listener_lifecycle.cpp)
 target_link_libraries(test_tcp_listener_lifecycle PRIVATE pypilot_event_loop)
 
@@ -103,5 +106,6 @@ add_test(NAME test_tcp_line_server COMMAND test_tcp_line_server)
 add_test(NAME test_tcp_fixed_header_server COMMAND test_tcp_fixed_header_server)
 add_test(NAME test_tcp_server_shutdown COMMAND test_tcp_server_shutdown)
 add_test(NAME test_tcp_disconnect_detection COMMAND test_tcp_disconnect_detection)
+add_test(NAME test_tcp_client_disconnect COMMAND test_tcp_client_disconnect)
 add_test(NAME test_tcp_listener_lifecycle COMMAND test_tcp_listener_lifecycle)
 add_test(NAME test_tcp_close_closes_clients COMMAND test_tcp_close_closes_clients)

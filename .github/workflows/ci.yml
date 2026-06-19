@@ -47,3 +47,6 @@ jobs:
 
       - name: Compile Arduino pin event example
         run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEventExample
+
+      - name: Compile Arduino interrupt pin event example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/InterruptPinEventExample

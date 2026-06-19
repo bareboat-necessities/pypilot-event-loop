@@ -41,7 +41,7 @@ Portable examples use one optional Arduino include block at the top, then includ
 #include <pypilot_event_loop.hpp>
 ```
 
-Example-only helper streams or sources may live under `examples/support/`. They are not part of `src/` or the public library API.
+Small throwaway streams or sources used only to drive an example stay local to that example file. Shared fixtures belong in `tests/support`, not in public headers and not in `src`.
 
 ## Common callback API
 
@@ -128,7 +128,7 @@ struct Handler final : pypilot_event_loop::ITcpServerHandler {
 };
 ```
 
-The listener supports reusable bind by default through `TcpListenOptions::reuse_address`.
+The listener supports reusable bind by default through `TcpListenOptions::reuse_address`. Use `NativeTcpServer::close()` to shut down the listener and close active accepted sockets.
 
 ## Linux FIFO streams
 
@@ -158,9 +158,10 @@ Linux TCP server examples:
 ```text
 examples/TcpLineServerExample/TcpLineServerExample.cpp
 examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp
+examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp
 ```
 
-These examples intentionally do not include Linux or Arduino backend headers and do not name backend-specific classes.
+The TCP examples demonstrate listen, accept, readable data, echo/framing, peer disconnect detection, listener shutdown, and active client shutdown.
 
 ## Build on Linux
 

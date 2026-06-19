@@ -10,28 +10,52 @@
 namespace pypilot_event_loop {
 
 struct LineView {
+    constexpr LineView() = default;
+    constexpr LineView(const char* data_value, size_t size_value)
+        : data(data_value), size(size_value) {}
+
     const char* data = nullptr;
     size_t size = 0;
 };
 
 struct FrameView {
+    constexpr FrameView() = default;
+    constexpr FrameView(const uint8_t* data_value, size_t size_value)
+        : data(data_value), size(size_value) {}
+
     const uint8_t* data = nullptr;
     size_t size = 0;
 };
 
 struct LineProtocolOptions {
+    constexpr LineProtocolOptions() = default;
+    constexpr LineProtocolOptions(char delimiter_value, bool strip_cr_value = true, bool drop_overflow_value = true)
+        : delimiter(delimiter_value), strip_cr(strip_cr_value), drop_overflow(drop_overflow_value) {}
+
     char delimiter = '\n';
     bool strip_cr = true;
     bool drop_overflow = true;
 };
 
 struct FixedFrameProtocolOptions {
+    constexpr FixedFrameProtocolOptions() = default;
+    explicit constexpr FixedFrameProtocolOptions(size_t frame_size_value)
+        : frame_size(frame_size_value) {}
+
     size_t frame_size = 0;
 };
 
 using PayloadSizeFromHeaderFn = size_t (*)(const uint8_t* header, size_t header_size);
 
 struct HeaderPayloadProtocolOptions {
+    constexpr HeaderPayloadProtocolOptions() = default;
+    constexpr HeaderPayloadProtocolOptions(size_t header_size_value,
+                                           size_t max_payload_size_value,
+                                           PayloadSizeFromHeaderFn payload_size_from_header_value)
+        : header_size(header_size_value),
+          max_payload_size(max_payload_size_value),
+          payload_size_from_header(payload_size_from_header_value) {}
+
     size_t header_size = 0;
     size_t max_payload_size = 0;
     PayloadSizeFromHeaderFn payload_size_from_header = nullptr;
@@ -149,7 +173,7 @@ private:
         if (options_.strip_cr && len > 0 && buffer_[len - 1] == '\r') {
             --len;
         }
-        LineView view{buffer_, len};
+        LineView view(buffer_, len);
         callback_.invoke(view);
         ++stats_.messages;
         size_ = 0;
@@ -201,7 +225,7 @@ public:
             ++stats_.bytes;
             buffer_[size_++] = byte;
             if (size_ == options_.frame_size) {
-                FrameView view{buffer_, size_};
+                FrameView view(buffer_, size_);
                 callback_.invoke(view);
                 ++stats_.messages;
                 size_ = 0;
@@ -297,7 +321,7 @@ private:
         }
 
         if (size_ >= expected_size_) {
-            FrameView view{buffer_, expected_size_};
+            FrameView view(buffer_, expected_size_);
             callback_.invoke(view);
             ++stats_.messages;
 

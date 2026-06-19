@@ -1,0 +1,190 @@
+#pragma once
+
+#include <stdint.h>
+#include <sys/time.h>
+#include <event2/event.h>
+
+#include <memory>
+#include <vector>
+
+#include "pypilot_event_loop/scheduler.hpp"
+#include "pypilot_event_loop/clock.hpp"
+
+namespace pypilot_event_loop {
+
+class LinuxLibeventLoop final : public IScheduler {
+public:
+    explicit LinuxLibeventLoop(IClock& clock)
+        : clock_(clock), base_(event_base_new()) {}
+
+    ~LinuxLibeventLoop() override {
+        for (auto& e : periodic_events_) {
+            if (e->ev) {
+                event_free(e->ev);
+                e->ev = nullptr;
+            }
+        }
+        for (auto& e : one_shot_events_) {
+            if (e->ev) {
+                event_free(e->ev);
+                e->ev = nullptr;
+            }
+        }
+        for (auto& e : fd_events_) {
+            if (e->ev) {
+                event_free(e->ev);
+                e->ev = nullptr;
+            }
+        }
+        if (base_) {
+            event_base_free(base_);
+            base_ = nullptr;
+        }
+    }
+
+    bool valid() const { return base_ != nullptr; }
+
+    bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
+        if (!base_ || period_us == 0) {
+            return false;
+        }
+        auto item = std::unique_ptr<TimerEvent>(new TimerEvent());
+        item->loop = this;
+        item->task = &task;
+        item->period_us = period_us;
+        item->periodic = true;
+        item->ev = evtimer_new(base_, &LinuxLibeventLoop::timer_callback, item.get());
+        if (!item->ev) {
+            return false;
+        }
+        timeval tv = timeval_from_us(period_us);
+        if (evtimer_add(item->ev, &tv) != 0) {
+            event_free(item->ev);
+            item->ev = nullptr;
+            return false;
+        }
+        periodic_events_.push_back(std::move(item));
+        return true;
+    }
+
+    bool add_one_shot(IRuntimeTask& task, uint64_t due_us) override {
+        if (!base_) {
+            return false;
+        }
+        auto item = std::unique_ptr<TimerEvent>(new TimerEvent());
+        item->loop = this;
+        item->task = &task;
+        item->period_us = 0;
+        item->periodic = false;
+        item->ev = evtimer_new(base_, &LinuxLibeventLoop::timer_callback, item.get());
+        if (!item->ev) {
+            return false;
+        }
+        const uint64_t now_us = clock_.micros();
+        const uint64_t delta_us = due_us > now_us ? due_us - now_us : 0;
+        timeval tv = timeval_from_us(delta_us);
+        if (evtimer_add(item->ev, &tv) != 0) {
+            event_free(item->ev);
+            item->ev = nullptr;
+            return false;
+        }
+        one_shot_events_.push_back(std::move(item));
+        return true;
+    }
+
+    bool add_readable_fd(int fd, IRuntimeTask& task) {
+        return add_fd(fd, EV_READ | EV_PERSIST, task);
+    }
+
+    bool add_writable_fd(int fd, IRuntimeTask& task) {
+        return add_fd(fd, EV_WRITE | EV_PERSIST, task);
+    }
+
+    void run_once() override {
+        if (base_) {
+            event_base_loop(base_, EVLOOP_NONBLOCK);
+        }
+    }
+
+    void run_forever() override {
+        if (base_) {
+            event_base_dispatch(base_);
+        }
+    }
+
+    void request_exit() override {
+        if (base_) {
+            event_base_loopbreak(base_);
+        }
+    }
+
+private:
+    struct TimerEvent {
+        LinuxLibeventLoop* loop = nullptr;
+        IRuntimeTask* task = nullptr;
+        event* ev = nullptr;
+        uint64_t period_us = 0;
+        bool periodic = false;
+    };
+
+    struct FdEvent {
+        LinuxLibeventLoop* loop = nullptr;
+        IRuntimeTask* task = nullptr;
+        event* ev = nullptr;
+    };
+
+    bool add_fd(int fd, short flags, IRuntimeTask& task) {
+        if (!base_ || fd < 0) {
+            return false;
+        }
+        auto item = std::unique_ptr<FdEvent>(new FdEvent());
+        item->loop = this;
+        item->task = &task;
+        item->ev = event_new(base_, fd, flags, &LinuxLibeventLoop::fd_callback, item.get());
+        if (!item->ev) {
+            return false;
+        }
+        if (event_add(item->ev, nullptr) != 0) {
+            event_free(item->ev);
+            item->ev = nullptr;
+            return false;
+        }
+        fd_events_.push_back(std::move(item));
+        return true;
+    }
+
+    static timeval timeval_from_us(uint64_t us) {
+        timeval tv;
+        tv.tv_sec = static_cast<time_t>(us / 1000000ULL);
+        tv.tv_usec = static_cast<suseconds_t>(us % 1000000ULL);
+        return tv;
+    }
+
+    static void timer_callback(evutil_socket_t, short, void* arg) {
+        auto* item = static_cast<TimerEvent*>(arg);
+        if (!item || !item->loop || !item->task) {
+            return;
+        }
+        item->task->poll(item->loop->clock_.micros());
+        if (item->periodic && item->ev) {
+            timeval tv = timeval_from_us(item->period_us);
+            evtimer_add(item->ev, &tv);
+        }
+    }
+
+    static void fd_callback(evutil_socket_t, short, void* arg) {
+        auto* item = static_cast<FdEvent*>(arg);
+        if (!item || !item->loop || !item->task) {
+            return;
+        }
+        item->task->poll(item->loop->clock_.micros());
+    }
+
+    IClock& clock_;
+    event_base* base_ = nullptr;
+    std::vector<std::unique_ptr<TimerEvent> > periodic_events_;
+    std::vector<std::unique_ptr<TimerEvent> > one_shot_events_;
+    std::vector<std::unique_ptr<FdEvent> > fd_events_;
+};
+
+} // namespace pypilot_event_loop

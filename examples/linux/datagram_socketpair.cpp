@@ -1,54 +1,28 @@
 #include <iostream>
-#include <sys/socket.h>
-#include <unistd.h>
 
 #include "pypilot_event_loop.hpp"
-#include "pypilot_event_loop_linux/linux_fd_datagram_stream.hpp"
-
-class DatagramReadTask final : public pypilot_event_loop::IRuntimeTask {
-public:
-    explicit DatagramReadTask(pypilot_event_loop::LinuxFdDatagramStream& stream) : stream_(stream) {}
-
-    void poll(uint64_t) override {
-        uint8_t buf[32];
-        const int n = stream_.recv(buf, sizeof(buf));
-        if (n > 0) {
-            std::cout << "datagram " << n << " bytes: ";
-            for (int i = 0; i < n; ++i) {
-                std::cout << static_cast<char>(buf[i]);
-            }
-            std::cout << std::endl;
-        }
-    }
-
-private:
-    pypilot_event_loop::LinuxFdDatagramStream& stream_;
-};
 
 int main() {
-    int fds[2];
-    if (socketpair(AF_UNIX, SOCK_DGRAM, 0, fds) != 0) {
-        return 1;
-    }
-
     pypilot_event_loop::EventLoop<> event_loop;
-    if (!event_loop.valid()) {
-        return 2;
-    }
+    pypilot_event_loop::StaticDatagramStream<4, 32> stream;
 
-    pypilot_event_loop::LinuxFdDatagramStream receiver(fds[0]);
-    pypilot_event_loop::LinuxFdDatagramStream sender(fds[1]);
-    DatagramReadTask read_task(receiver);
+    int packets_read = 0;
 
-    if (!event_loop.scheduler().add_readable_fd(fds[0], read_task)) {
-        return 3;
-    }
+    event_loop.on_delay(0, [&stream]() {
+        const uint8_t msg[] = {'d', 'a', 't', 'a'};
+        stream.send(msg, sizeof(msg));
+    });
 
-    const uint8_t msg[] = {'u', 'd', 'p'};
-    sender.send(msg, sizeof(msg));
-    event_loop.tick();
+    event_loop.on_repeat(1, [&event_loop, &stream, &packets_read]() {
+        uint8_t buf[16];
+        const int n = stream.recv(buf, sizeof(buf));
+        if (n > 0) {
+            packets_read++;
+            std::cout << "datagram stream read " << n << " bytes" << std::endl;
+            event_loop.request_exit();
+        }
+    });
 
-    close(fds[0]);
-    close(fds[1]);
-    return 0;
+    event_loop.run_forever();
+    return packets_read == 1 ? 0 : 1;
 }

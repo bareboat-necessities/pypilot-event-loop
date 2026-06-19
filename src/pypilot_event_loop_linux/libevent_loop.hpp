@@ -103,6 +103,21 @@ public:
         return add_fd(fd, EV_WRITE | EV_PERSIST, task);
     }
 
+    bool remove_fd(int fd, IRuntimeTask& task) {
+        for (auto it = fd_events_.begin(); it != fd_events_.end(); ++it) {
+            FdEvent* item = it->get();
+            if (item && item->fd == fd && item->task == &task) {
+                if (item->ev) {
+                    event_free(item->ev);
+                    item->ev = nullptr;
+                }
+                fd_events_.erase(it);
+                return true;
+            }
+        }
+        return false;
+    }
+
     void run_once() override {
         if (base_) {
             event_base_loop(base_, EVLOOP_NONBLOCK);
@@ -134,6 +149,7 @@ private:
         LinuxLibeventLoop* loop = nullptr;
         IRuntimeTask* task = nullptr;
         event* ev = nullptr;
+        int fd = -1;
     };
 
     bool add_fd(int fd, short flags, IRuntimeTask& task) {
@@ -143,6 +159,7 @@ private:
         auto item = std::unique_ptr<FdEvent>(new FdEvent());
         item->loop = this;
         item->task = &task;
+        item->fd = fd;
         item->ev = event_new(base_, fd, flags, &LinuxLibeventLoop::fd_callback, item.get());
         if (!item->ev) {
             return false;

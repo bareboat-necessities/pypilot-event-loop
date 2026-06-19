@@ -19,4 +19,15 @@ void loop_example() {
     event_loop.tick();
 }
 
-PYPILOT_EVENT_LOOP_EXAMPLE_MAIN(setup_example, loop_example)
+#ifdef ARDUINO
+void setup() { setup_example(); }
+void loop() { loop_example(); }
+#else
+int main() {
+    setup_example();
+    for (int i = 0; i < 1000; ++i) {
+        loop_example();
+    }
+    return timer_count == 1 ? 0 : 1;
+}
+#endif

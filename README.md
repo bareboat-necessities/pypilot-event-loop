@@ -41,7 +41,7 @@ Portable examples use one optional Arduino include block at the top, then includ
 #include <pypilot_event_loop.hpp>
 ```
 
-Example-only helper streams or sources live inside the example file itself. They are not part of `src/`.
+Example-only helper streams or sources may live under `examples/support/`. They are not part of `src/` or the public library API.
 
 ## Common callback API
 

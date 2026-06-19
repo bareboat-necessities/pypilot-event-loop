@@ -64,6 +64,8 @@ private:
 };
 
 class LinuxTcpServer final {
+    friend class LinuxTcpConnection;
+
 public:
     explicit LinuxTcpServer(LinuxLibeventLoop& loop, size_t max_connections = 16)
         : loop_(loop), max_connections_(max_connections) {}

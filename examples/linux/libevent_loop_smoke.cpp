@@ -9,7 +9,7 @@ int main() {
     }
 
     int count = 0;
-    if (!event_loop.onRepeat(100, [&event_loop, &count]() {
+    if (!event_loop.on_repeat(100, [&event_loop, &count]() {
             std::cout << "tick " << count << std::endl;
             if (++count >= 3) {
                 event_loop.request_exit();

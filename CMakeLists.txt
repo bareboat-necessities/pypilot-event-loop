@@ -43,6 +43,9 @@ target_link_libraries(test_pin_event_task PRIVATE pypilot_event_loop)
 add_executable(test_readable_callback tests/test_readable_callback.cpp)
 target_link_libraries(test_readable_callback PRIVATE pypilot_event_loop)
 
+add_executable(test_protocol_readers tests/test_protocol_readers.cpp)
+target_link_libraries(test_protocol_readers PRIVATE pypilot_event_loop)
+
 add_executable(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
 target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
 
@@ -67,4 +70,5 @@ add_test(NAME test_memory_stream COMMAND test_memory_stream)
 add_test(NAME test_callback_task COMMAND test_callback_task)
 add_test(NAME test_pin_event_task COMMAND test_pin_event_task)
 add_test(NAME test_readable_callback COMMAND test_readable_callback)
+add_test(NAME test_protocol_readers COMMAND test_protocol_readers)
 add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)

@@ -32,6 +32,7 @@ public:
     virtual int read(uint8_t* dst, size_t max_len) = 0;
     virtual int write(const uint8_t* src, size_t len) = 0;
 
+    virtual bool peek(uint8_t* dst, size_t len) = 0;
     virtual bool read_exact(uint8_t* dst, size_t len) = 0;
     virtual bool read_line(char* dst, size_t max_len, bool strip_cr = true) = 0;
 };

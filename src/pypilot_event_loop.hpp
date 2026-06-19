@@ -12,4 +12,5 @@
 #include "pypilot_event_loop/scheduler.hpp"
 #include "pypilot_event_loop/native.hpp"
 #include "pypilot_event_loop/callback_task.hpp"
+#include "pypilot_event_loop/pin_event.hpp"
 #include "pypilot_event_loop/application.hpp"

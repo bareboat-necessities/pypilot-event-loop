@@ -49,10 +49,25 @@ target_link_libraries(test_linux_fifo_stream PRIVATE pypilot_event_loop)
 add_executable(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
 target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
 
+add_executable(test_tcp_line_server tests/test_tcp_line_server.cpp)
+target_link_libraries(test_tcp_line_server PRIVATE pypilot_event_loop)
+
+add_executable(test_tcp_fixed_header_server tests/test_tcp_fixed_header_server.cpp)
+target_link_libraries(test_tcp_fixed_header_server PRIVATE pypilot_event_loop)
+
+add_executable(test_tcp_server_shutdown tests/test_tcp_server_shutdown.cpp)
+target_link_libraries(test_tcp_server_shutdown PRIVATE pypilot_event_loop)
+
 add_portable_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.ino)
 add_portable_example(line_protocol_example examples/LineProtocolExample/LineProtocolExample.ino)
 add_portable_example(fixed_header_protocol_example examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino)
 add_portable_example(pin_event_example examples/PinEventExample/PinEventExample.ino)
+
+add_executable(tcp_line_server_example examples/TcpLineServerExample/TcpLineServerExample.cpp)
+target_link_libraries(tcp_line_server_example PRIVATE pypilot_event_loop)
+
+add_executable(tcp_fixed_header_server_example examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp)
+target_link_libraries(tcp_fixed_header_server_example PRIVATE pypilot_event_loop)
 
 enable_testing()
 add_test(NAME test_timer COMMAND test_timer)
@@ -63,3 +78,6 @@ add_test(NAME test_bytes_ready_callback COMMAND test_bytes_ready_callback)
 add_test(NAME test_protocol_readers COMMAND test_protocol_readers)
 add_test(NAME test_linux_fifo_stream COMMAND test_linux_fifo_stream)
 add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)
+add_test(NAME test_tcp_line_server COMMAND test_tcp_line_server)
+add_test(NAME test_tcp_fixed_header_server COMMAND test_tcp_fixed_header_server)
+add_test(NAME test_tcp_server_shutdown COMMAND test_tcp_server_shutdown)

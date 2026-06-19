@@ -26,27 +26,48 @@ jobs:
 
   arduino:
     runs-on: ubuntu-latest
+    env:
+      ARDUINO_BOARD_FQBN: esp32:esp32:esp32s3
+      ESP32_PACKAGE_URL: https://espressif.github.io/arduino-esp32/package_esp32_index.json
     steps:
       - uses: actions/checkout@v4
 
       - uses: arduino/setup-arduino-cli@v2
 
-      - name: Install AVR core
+      - name: Install ESP32 core
         run: |
-          arduino-cli core update-index
-          arduino-cli core install arduino:avr
+          arduino-cli core update-index --additional-urls "$ESP32_PACKAGE_URL"
+          arduino-cli core install esp32:esp32 --additional-urls "$ESP32_PACKAGE_URL"
 
       - name: Compile portable timer example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/EventLoopTimerExample
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/EventLoopTimerExample
 
       - name: Compile portable line protocol example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/LineProtocolExample
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/LineProtocolExample
 
       - name: Compile portable fixed header protocol example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/FixedHeaderProtocolExample
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/FixedHeaderProtocolExample
 
       - name: Compile portable serial line protocol example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/SerialLineProtocolExample
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/SerialLineProtocolExample
 
       - name: Compile portable pin event example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/PinEventExample
+
+      - name: Compile pin IO example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/PinIoExample
+
+      - name: Compile TCP line client example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/TcpLineClientExample
+
+      - name: Compile TCP line server example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/TcpLineServerExample
+
+      - name: Compile UDP broadcast sender example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/UdpBroadcastSenderExample
+
+      - name: Compile UDP receiver example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/UdpReceiverExample
+
+      - name: Compile integrated event loop example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/IntegratedEventLoopExample

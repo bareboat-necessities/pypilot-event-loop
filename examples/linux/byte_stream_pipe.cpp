@@ -16,15 +16,18 @@ int main() {
 
     int bytes_read = 0;
 
-    event_loop.on_readable(reader, [&]() {
+    const pypilot_event_loop::EventHandle reader_event = event_loop.on_bytes_ready(reader, [&]() {
         uint8_t buf[16];
         const int n = reader.read(buf, sizeof(buf));
         if (n > 0) {
             bytes_read += n;
-            std::cout << "byte stream readiness read " << n << " bytes" << std::endl;
+            std::cout << "byte stream data ready read " << n << " bytes" << std::endl;
             event_loop.request_exit();
         }
     });
+    if (!event_loop.valid(reader_event)) {
+        return 2;
+    }
 
     event_loop.on_delay(0, [&]() {
         const uint8_t msg[] = {'h', 'e', 'l', 'l', 'o'};

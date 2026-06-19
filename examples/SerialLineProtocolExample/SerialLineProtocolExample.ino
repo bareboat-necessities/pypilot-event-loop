@@ -17,6 +17,8 @@ NativeSerialStream port(Serial);
 NativeSerialStream port;
 #endif
 
+uint32_t tx_count = 0;
+
 static size_t text_len(const char* s) {
     size_t n = 0;
     while (s && s[n] != '\0') {
@@ -29,8 +31,27 @@ static void write_text(const char* s) {
     port.write(reinterpret_cast<const uint8_t*>(s), text_len(s));
 }
 
+static void write_uint32(uint32_t value) {
+    char digits[10];
+    size_t n = 0;
+    do {
+        digits[n++] = static_cast<char>('0' + (value % 10));
+        value /= 10;
+    } while (value > 0 && n < sizeof(digits));
+    while (n > 0) {
+        const char c = digits[--n];
+        port.write(reinterpret_cast<const uint8_t*>(&c), 1);
+    }
+}
+
+static void write_outbound_line() {
+    write_text("tx: ");
+    write_uint32(tx_count++);
+    write_text("\n");
+}
+
 LineProtocolReader<128> lines(port, LineProtocolOptions{}, [](LineView line) {
-    write_text("line: ");
+    write_text("rx: ");
     if (line.data && line.size > 0) {
         port.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
     }
@@ -43,7 +64,10 @@ void setup_example() {
     event_loop.on_bytes_ready(port, []() {
         lines.poll(event_loop.clock().micros());
     });
-    write_text("line reader ready\n");
+    event_loop.on_repeat(1000, []() {
+        write_outbound_line();
+    });
+    write_text("serial line protocol read/write ready\n");
 }
 #else
 bool setup_example(const char* device, unsigned long baud) {
@@ -54,7 +78,10 @@ bool setup_example(const char* device, unsigned long baud) {
     event_loop.on_bytes_ready(port, []() {
         lines.poll(event_loop.clock().micros());
     });
-    write_text("line reader ready\n");
+    event_loop.on_repeat(1000, []() {
+        write_outbound_line();
+    });
+    write_text("serial line protocol read/write ready\n");
     return true;
 }
 #endif

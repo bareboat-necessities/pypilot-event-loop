@@ -15,13 +15,17 @@ int main() {
     pypilot_event_loop::LinuxFdStream writer(fds[1]);
 
     int bytes_read = 0;
-    assert(event_loop.on_readable(reader, [&]() {
+    const pypilot_event_loop::EventHandle handle = event_loop.on_bytes_ready(reader, [&]() {
         uint8_t buf[8];
         const int n = reader.read(buf, sizeof(buf));
         if (n > 0) {
             bytes_read += n;
         }
-    }));
+    });
+    assert(event_loop.valid(handle));
+
+    assert(event_loop.disable(handle));
+    assert(event_loop.enable(handle));
 
     const uint8_t msg[] = {'o', 'k'};
     assert(writer.write(msg, sizeof(msg)) == 2);
@@ -29,6 +33,9 @@ int main() {
     for (int i = 0; i < 10 && bytes_read == 0; ++i) {
         event_loop.run_once();
     }
+
+    assert(event_loop.remove(handle));
+    assert(!event_loop.valid(handle));
 
     close(fds[0]);
     close(fds[1]);

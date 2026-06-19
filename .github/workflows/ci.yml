@@ -36,17 +36,14 @@ jobs:
           arduino-cli core update-index
           arduino-cli core install arduino:avr
 
-      - name: Compile Arduino smoke example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke
+      - name: Compile portable timer example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/EventLoopTimerExample
 
-      - name: Compile Arduino byte stream example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho
+      - name: Compile portable line protocol example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/LineProtocolExample
 
-      - name: Compile Arduino datagram stream example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/DatagramStreamExample
+      - name: Compile portable fixed header protocol example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/FixedHeaderProtocolExample
 
-      - name: Compile Arduino pin event example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEventExample
-
-      - name: Compile Arduino interrupt pin event example
-        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/InterruptPinEventExample
+      - name: Compile portable pin event example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample

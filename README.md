@@ -2,7 +2,7 @@
 
 Portable event-loop and scheduling abstraction for the modular C++ pypilot port.
 
-The module provides a Linux backend using libevent and an Arduino cooperative backend. Normal application code uses the same `EventLoop`, stream, protocol-reader, and pin-event APIs on both platforms.
+The module provides a Linux backend using libevent and an Arduino cooperative backend. Normal application code uses the same `EventLoop`, stream, protocol-reader, pin-event, and TCP interfaces where the platform supports them.
 
 ## Public model
 
@@ -16,6 +16,8 @@ The public API exposes:
 - line-delimited protocol readers
 - fixed-size frame protocol readers
 - header+payload protocol readers
+- TCP listener/connection interfaces
+- Linux TCP server backend using libevent listener/bufferevent/evbuffer
 - Linux named FIFO byte streams for runtime/backend code
 - event handles for enable/disable/remove
 - `IPinEventSource`
@@ -100,6 +102,34 @@ pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
     });
 ```
 
+## TCP server API
+
+Linux exposes `NativeTcpServer`, which wraps libevent `evconnlistener` for accepting sockets and `bufferevent`/`evbuffer` for connection I/O.
+
+```cpp
+struct Handler final : pypilot_event_loop::ITcpServerHandler {
+    void on_accept(pypilot_event_loop::ITcpConnection& c,
+                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+        // accepted connection
+    }
+
+    void on_data(pypilot_event_loop::ITcpConnection& c) override {
+        char line[256];
+        while (c.read_line(line, sizeof(line))) {
+            c.write(reinterpret_cast<const uint8_t*>(line), strlen(line));
+            const uint8_t nl = '\n';
+            c.write(&nl, 1);
+        }
+    }
+
+    void on_close(pypilot_event_loop::ITcpConnection& c) override {
+        // peer disconnected
+    }
+};
+```
+
+The listener supports reusable bind by default through `TcpListenOptions::reuse_address`.
+
 ## Linux FIFO streams
 
 `LinuxFifoByteStream` wraps a named FIFO as an `IByteStream`. It is a Linux-specific backend class, so it should be used by Linux runtime code or backend tests, not by portable protocol examples.
@@ -114,13 +144,20 @@ Linux runtime code can use `LinuxGpiodPinEventSource`. Arduino runtime code can 
 
 ## Examples
 
-The public examples are shared between Linux and Arduino builds:
+Shared Linux/Arduino examples:
 
 ```text
 examples/EventLoopTimerExample/EventLoopTimerExample.ino
 examples/LineProtocolExample/LineProtocolExample.ino
 examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino
 examples/PinEventExample/PinEventExample.ino
+```
+
+Linux TCP server examples:
+
+```text
+examples/TcpLineServerExample/TcpLineServerExample.cpp
+examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp
 ```
 
 These examples intentionally do not include Linux or Arduino backend headers and do not name backend-specific classes.

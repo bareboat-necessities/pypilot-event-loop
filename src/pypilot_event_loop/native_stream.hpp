@@ -6,11 +6,14 @@
 #else
 #include <unistd.h>
 #include "pypilot_event_loop_linux/linux_fd_stream.hpp"
+#include "pypilot_event_loop_linux/linux_serial_stream.hpp"
 #endif
 
 namespace pypilot_event_loop {
 
 #if defined(ARDUINO)
+using NativeSerialStream = ArduinoSerialStream;
+
 class NativeConsoleStream final : public IByteStream {
 public:
     NativeConsoleStream() : serial_(Serial) {}
@@ -27,6 +30,8 @@ private:
     ArduinoSerialStream serial_;
 };
 #else
+using NativeSerialStream = LinuxSerialStream;
+
 class NativeConsoleStream final : public IByteStream {
 public:
     NativeConsoleStream() : input_(STDIN_FILENO), output_(STDOUT_FILENO) {}

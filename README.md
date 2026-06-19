@@ -29,6 +29,8 @@ The core APIs expose:
 - Linux libgpiod pin event source
 - legacy Linux sysfs pin event fallback
 - Arduino cooperative pin event source
+- Arduino interrupt guard
+- Arduino interrupt-backed pin event source
 - pin event tasks
 - lambda-backed pin event tasks
 - bounded event queues with overflow policies
@@ -183,14 +185,27 @@ event_loop.on_pin_event(pin, [](const pypilot_event_loop::PinEvent& event) {
 
 Linux gpiod sources expose a native fd, so libevent wakes the callback only when the GPIO request fd is readable. Arduino and other cooperative sources return `native_fd() == -1`, so the same callback is checked from `tick()`.
 
-Sampled pins still use `IPinInput`, `PinEventTask`, and `LambdaPinEventTask` for simpler polling/test cases:
+Sampled pins still use `IPinInput`, `PinEventTask`, and `LambdaPinEventTask` for simpler polling/test cases.
+
+## Arduino interrupt-backed pin events
+
+Use `ArduinoInterruptPinEventSource` when a hardware ISR should wake normal loop-context handling. The ISR only records a pending event; the user callback runs later from `event_loop.tick()`.
 
 ```cpp
-pypilot_event_loop::LambdaPinEventTask<> task(pin,
-    pypilot_event_loop::PinEventType::FallingEdge,
-    []() {
-        // pin event callback
+pypilot_event_loop::ArduinoInterruptPinEventSource button_event(
+    2,
+    pypilot_event_loop::PinEventType::RisingEdge);
+
+void button_isr() {
+    button_event.notify_from_isr(digitalRead(2) == HIGH);
+}
+
+void setup() {
+    attachInterrupt(digitalPinToInterrupt(2), button_isr, RISING);
+    event_loop.on_pin_event(button_event, [](const pypilot_event_loop::PinEvent& event) {
+        // normal loop context, not ISR context
     });
+}
 ```
 
 Available platform sources:
@@ -199,6 +214,7 @@ Available platform sources:
 LinuxGpiodPinEventSource
 LinuxSysfsPinEventSource
 ArduinoDigitalPinEventSource
+ArduinoInterruptPinEventSource
 ```
 
 ## Lower-level common API
@@ -243,6 +259,7 @@ examples/linux/fifo_line_reader.cpp
 ```text
 examples/linux/gpiod_pin_event.cpp
 examples/arduino/PinEventExample/PinEventExample.ino
+examples/arduino/InterruptPinEventExample/InterruptPinEventExample.ino
 ```
 
 ## Linux backend
@@ -275,6 +292,7 @@ arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/Event
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/DatagramStreamExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEventExample
+arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/InterruptPinEventExample
 ```
 
 ## OpenWRT note

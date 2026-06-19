@@ -1,0 +1,67 @@
+#include <cassert>
+
+#include "pypilot_event_loop.hpp"
+
+struct ClosingServerHandler final : public pypilot_event_loop::ITcpServerHandler {
+    int accepted = 0;
+
+    void on_accept(pypilot_event_loop::ITcpConnection& connection,
+                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+        (void)peer;
+        ++accepted;
+        connection.close();
+    }
+};
+
+struct ClientHandler final : public pypilot_event_loop::ITcpClientHandler {
+    int connected = 0;
+    int closed = 0;
+    int errors = 0;
+
+    void on_connect(pypilot_event_loop::ITcpConnection& connection,
+                    const pypilot_event_loop::TcpPeerInfo& peer) override {
+        (void)connection;
+        (void)peer;
+        ++connected;
+    }
+
+    void on_close(pypilot_event_loop::ITcpConnection& connection) override {
+        (void)connection;
+        ++closed;
+    }
+
+    void on_error(int error_code) override {
+        (void)error_code;
+        ++errors;
+    }
+};
+
+int main() {
+    pypilot_event_loop::EventLoop<> event_loop;
+    ClosingServerHandler server_handler;
+    ClientHandler client_handler;
+
+    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
+    pypilot_event_loop::TcpListenOptions listen_options;
+    listen_options.host = "127.0.0.1";
+    listen_options.port = 0;
+    assert(server.listen(listen_options, server_handler));
+
+    pypilot_event_loop::NativeTcpClient client(event_loop.scheduler());
+    pypilot_event_loop::TcpConnectOptions connect_options;
+    connect_options.host = "127.0.0.1";
+    connect_options.port = server.port();
+    assert(client.connect(connect_options, client_handler));
+    assert(client_handler.connected == 1);
+
+    for (int i = 0; i < 200 && client_handler.closed == 0 && client_handler.errors == 0; ++i) {
+        event_loop.run_once();
+    }
+
+    assert(server_handler.accepted == 1);
+    assert(client_handler.closed == 1);
+    assert(client_handler.errors == 0);
+    assert(!client.valid());
+    assert(server.connection_count() == 0);
+    return 0;
+}

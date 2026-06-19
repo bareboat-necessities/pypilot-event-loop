@@ -16,6 +16,9 @@ The core APIs expose:
 - byte streams
 - datagram streams
 - byte/data-ready callbacks
+- line-delimited protocol readers
+- fixed-size frame protocol readers
+- header+payload protocol readers
 - native file descriptor integration for Linux streams
 - event handles for enable/disable/remove
 - static byte streams for portable tests/examples
@@ -79,6 +82,44 @@ pypilot_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() 
 ```
 
 On Linux, fd-backed streams return `native_fd() >= 0` and are registered with libevent fd readiness internally. On Arduino and static streams, `native_fd() == -1`, so the same callback is checked cooperatively from `tick()`.
+
+## Protocol readers
+
+Use protocol readers when the application should receive complete messages rather than raw readable bytes.
+
+Line-delimited protocol:
+
+```cpp
+pypilot_event_loop::LineProtocolReader<128> lines(stream, {}, [](pypilot_event_loop::LineView line) {
+    // complete line, with optional CR stripping
+});
+
+event_loop.on_bytes_ready(stream, [&]() {
+    lines.poll(event_loop.clock().micros());
+});
+```
+
+Fixed-size frame protocol:
+
+```cpp
+pypilot_event_loop::FixedFrameProtocolReader<64> frames(
+    stream,
+    pypilot_event_loop::FixedFrameProtocolOptions{32},
+    [](pypilot_event_loop::FrameView frame) {
+        // exactly 32 bytes
+    });
+```
+
+Header+payload protocol:
+
+```cpp
+pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
+    stream,
+    pypilot_event_loop::HeaderPayloadProtocolOptions{4, 256, payload_size_from_header},
+    [](pypilot_event_loop::FrameView frame) {
+        // complete header + payload
+    });
+```
 
 ## Event queues
 
@@ -168,6 +209,13 @@ The Linux and Arduino datagram examples use the same public data-ready API: `Eve
 ```text
 examples/linux/datagram_socketpair.cpp
 examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
+```
+
+## Protocol examples
+
+```text
+examples/linux/line_protocol_pipe.cpp
+examples/linux/fixed_frame_pipe.cpp
 ```
 
 ## Pin event examples

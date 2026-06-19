@@ -38,3 +38,6 @@ jobs:
 
       - name: Compile Arduino smoke example
         run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke
+
+      - name: Compile Arduino serial byte stream example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho

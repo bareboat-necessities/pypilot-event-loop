@@ -2,7 +2,7 @@
 
 Portable event-loop and scheduling abstraction for the modular C++ pypilot port.
 
-The module provides a Linux backend using libevent and an Arduino cooperative loop backend. Normal application code uses the same public `NativeClock` and `NativeScheduler` aliases on both platforms; the aliases select the platform backend at compile time.
+The module provides a Linux backend using libevent and an Arduino cooperative backend. Normal application code can use one `EventLoop` object on both platforms, while lower-level code can still use `IRuntimeTask`, `IScheduler`, `NativeClock`, and `NativeScheduler` directly.
 
 ## Purpose
 
@@ -16,7 +16,8 @@ The core APIs expose:
 - byte streams
 - datagram streams
 - fixed-size event queues
-- test scheduler
+- fixed-storage callback tasks
+- ReactESP-style `EventLoop` callback facade
 - native platform clock alias
 - native platform scheduler alias
 - Linux libevent scheduler
@@ -24,9 +25,29 @@ The core APIs expose:
 
 The normal pypilot modules should not include libevent, POSIX socket, or Arduino headers.
 
-## Common API
+## Common callback API
 
 Use this style in normal code:
+
+```cpp
+#include <pypilot_event_loop.hpp>
+
+pypilot_event_loop::EventLoop<> event_loop;
+
+event_loop.onRepeat(1000, []() {
+    // runs once per second
+});
+
+event_loop.onDelay(500, []() {
+    // runs once after 500 ms
+});
+```
+
+On Linux, `EventLoop` uses the libevent backend. On Arduino, it uses the cooperative Arduino backend.
+
+## Lower-level common API
+
+The lower-level API is also platform-neutral:
 
 ```cpp
 #include <pypilot_event_loop.hpp>
@@ -35,15 +56,19 @@ pypilot_event_loop::NativeClock clock;
 pypilot_event_loop::NativeScheduler scheduler(clock);
 ```
 
-On Linux this resolves to the libevent backend. On Arduino this resolves to the cooperative Arduino backend.
-
 ## Linux backend
 
 Linux uses libevent only. There is no raw `poll()` fallback in this module.
 
 ## Arduino backend
 
-Arduino uses the same `NativeClock` and `NativeScheduler` names. Call `scheduler.run_once()` from the sketch `loop()` function.
+Arduino can call the same facade from the sketch loop:
+
+```cpp
+void loop() {
+    event_loop.tick();
+}
+```
 
 ## Build on Linux
 

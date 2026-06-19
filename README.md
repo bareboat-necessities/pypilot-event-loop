@@ -15,9 +15,12 @@ The core APIs expose:
 - one-shot timers
 - byte streams
 - datagram streams
+- digital pin input abstraction
+- pin event tasks
+- lambda-backed pin event tasks
 - fixed-size event queues
 - fixed-storage callback tasks
-- ReactESP-style `EventLoop` callback facade
+- `EventLoop` callback facade
 - native platform clock alias
 - native platform scheduler alias
 - Linux libevent scheduler
@@ -34,16 +37,38 @@ Use this style in normal code:
 
 pypilot_event_loop::EventLoop<> event_loop;
 
-event_loop.onRepeat(1000, []() {
+event_loop.on_repeat(1000, []() {
     // runs once per second
 });
 
-event_loop.onDelay(500, []() {
+event_loop.on_delay(500, []() {
     // runs once after 500 ms
 });
 ```
 
 On Linux, `EventLoop` uses the libevent backend. On Arduino, it uses the cooperative Arduino backend.
+
+## Pin event API
+
+Use `PinEventTask` when a pin event should invoke a named task:
+
+```cpp
+pypilot_event_loop::PinEventTask task(pin, target_task,
+                                      pypilot_event_loop::PinEventType::RisingEdge,
+                                      5000);
+```
+
+Use `LambdaPinEventTask` when a pin event should invoke a lambda:
+
+```cpp
+pypilot_event_loop::LambdaPinEventTask<> task(pin,
+    pypilot_event_loop::PinEventType::FallingEdge,
+    []() {
+        // pin event callback
+    });
+```
+
+The pin abstraction is platform-neutral, so Raspberry Pi GPIO and Arduino digital pins can both adapt to `IPinInput`.
 
 ## Lower-level common API
 

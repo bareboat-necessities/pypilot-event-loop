@@ -2,6 +2,7 @@
 #include <cstring>
 
 #include "pypilot_event_loop.hpp"
+#include "support/memory_stream.hpp"
 
 static size_t one_byte_length_header(const uint8_t* header, size_t header_size) {
     assert(header_size == 1);
@@ -10,9 +11,10 @@ static size_t one_byte_length_header(const uint8_t* header, size_t header_size) 
 
 int main() {
     using namespace pypilot_event_loop;
+    using pypilot_event_loop_test::MemoryByteStream;
 
     {
-        StaticByteStream<64> stream;
+        MemoryByteStream<64> stream;
         int lines = 0;
         char captured[2][8]{};
         size_t captured_sizes[2]{};
@@ -38,7 +40,7 @@ int main() {
     }
 
     {
-        StaticByteStream<64> stream;
+        MemoryByteStream<64> stream;
         int frames = 0;
         uint8_t captured[2][3]{};
 
@@ -60,7 +62,7 @@ int main() {
     }
 
     {
-        StaticByteStream<64> stream;
+        MemoryByteStream<64> stream;
         int frames = 0;
         size_t sizes[2]{};
 

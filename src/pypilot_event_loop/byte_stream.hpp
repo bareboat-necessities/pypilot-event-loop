@@ -5,6 +5,13 @@
 
 namespace pypilot_event_loop {
 
+/**
+ * Portable byte stream interface.
+ *
+ * Linux fd-backed implementations should return a non-negative native_fd() so
+ * EventLoop::on_readable() can use libevent fd readiness. Arduino and in-memory
+ * streams return -1 and are checked cooperatively from tick().
+ */
 class IByteStream {
 public:
     virtual ~IByteStream() = default;
@@ -15,6 +22,8 @@ public:
     virtual bool readable() const = 0;
     virtual bool writable() const = 0;
     virtual bool valid() const = 0;
+
+    virtual int native_fd() const { return -1; }
 };
 
 } // namespace pypilot_event_loop

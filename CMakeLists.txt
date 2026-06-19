@@ -58,6 +58,12 @@ target_link_libraries(byte_stream_pipe PRIVATE pypilot_event_loop)
 add_executable(datagram_socketpair examples/linux/datagram_socketpair.cpp)
 target_link_libraries(datagram_socketpair PRIVATE pypilot_event_loop)
 
+add_executable(line_protocol_pipe examples/linux/line_protocol_pipe.cpp)
+target_link_libraries(line_protocol_pipe PRIVATE pypilot_event_loop)
+
+add_executable(fixed_frame_pipe examples/linux/fixed_frame_pipe.cpp)
+target_link_libraries(fixed_frame_pipe PRIVATE pypilot_event_loop)
+
 add_executable(gpiod_pin_event examples/linux/gpiod_pin_event.cpp)
 target_link_libraries(gpiod_pin_event PRIVATE pypilot_event_loop)
 

@@ -7,15 +7,17 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
+pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
 
 add_library(pypilot_event_loop INTERFACE)
 target_include_directories(pypilot_event_loop INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${LIBEVENT_INCLUDE_DIRS}
+    ${LIBGPIOD_INCLUDE_DIRS}
 )
-target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS})
-target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES})
-target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER})
+target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS} ${LIBGPIOD_LIBRARY_DIRS})
+target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES} ${LIBGPIOD_LIBRARIES})
+target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER} ${LIBGPIOD_CFLAGS_OTHER})
 
 add_executable(test_event_queue tests/test_event_queue.cpp)
 target_link_libraries(test_event_queue PRIVATE pypilot_event_loop)
@@ -52,6 +54,9 @@ target_link_libraries(byte_stream_pipe PRIVATE pypilot_event_loop)
 
 add_executable(datagram_socketpair examples/linux/datagram_socketpair.cpp)
 target_link_libraries(datagram_socketpair PRIVATE pypilot_event_loop)
+
+add_executable(gpiod_pin_event examples/linux/gpiod_pin_event.cpp)
+target_link_libraries(gpiod_pin_event PRIVATE pypilot_event_loop)
 
 enable_testing()
 add_test(NAME test_event_queue COMMAND test_event_queue)

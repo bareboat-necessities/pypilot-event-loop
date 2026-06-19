@@ -57,25 +57,21 @@ static void connect_wifi() {
 }
 #endif
 
-static bool setup_example(const char* broadcast_host, uint16_t port, uint16_t local_port) {
+static bool setup_example(const char* host, uint16_t port, uint16_t local_port) {
 #if defined(ARDUINO)
     connect_wifi();
 #endif
     if (!udp.bind(local_port)) {
         return false;
     }
-    if (!udp.set_remote(broadcast_host, port)) {
+    if (!udp.set_remote(host, port)) {
         return false;
     }
     event_loop.on_repeat(1000, []() {
-        char message[96];
-#if defined(ARDUINO)
-        snprintf(message, sizeof(message), "pypilot udp broadcast %lu\n", static_cast<unsigned long>(sequence++));
-#else
-        snprintf(message, sizeof(message), "pypilot udp broadcast %u\n", sequence++);
-#endif
+        const char message[] = "pypilot udp broadcast\n";
         udp.send(reinterpret_cast<const uint8_t*>(message), strlen(message));
-        print_text("sent broadcast ");
+        ++sequence;
+        print_text("sent udp datagram ");
         print_number(sequence);
         print_text("\n");
     });
@@ -86,7 +82,7 @@ static bool setup_example(const char* broadcast_host, uint16_t port, uint16_t lo
 void setup() {
     Serial.begin(115200);
     if (!setup_example(PYPILOT_UDP_BROADCAST_HOST, PYPILOT_UDP_PORT, PYPILOT_UDP_LOCAL_PORT)) {
-        print_text("udp broadcast sender setup failed\n");
+        print_text("udp sender setup failed\n");
     }
 }
 
@@ -99,7 +95,7 @@ int main(int argc, char** argv) {
     const uint16_t port = argc > 2 ? static_cast<uint16_t>(std::strtoul(argv[2], nullptr, 10)) : 20225;
     const uint16_t local_port = argc > 3 ? static_cast<uint16_t>(std::strtoul(argv[3], nullptr, 10)) : 0;
     if (!setup_example(host, port, local_port)) {
-        std::cerr << "udp broadcast sender setup failed" << std::endl;
+        std::cerr << "udp sender setup failed" << std::endl;
         return 1;
     }
     event_loop.run_forever();

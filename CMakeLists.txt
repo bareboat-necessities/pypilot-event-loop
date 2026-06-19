@@ -58,6 +58,15 @@ target_link_libraries(test_tcp_fixed_header_server PRIVATE pypilot_event_loop)
 add_executable(test_tcp_server_shutdown tests/test_tcp_server_shutdown.cpp)
 target_link_libraries(test_tcp_server_shutdown PRIVATE pypilot_event_loop)
 
+add_executable(test_tcp_disconnect_detection tests/test_tcp_disconnect_detection.cpp)
+target_link_libraries(test_tcp_disconnect_detection PRIVATE pypilot_event_loop)
+
+add_executable(test_tcp_listener_lifecycle tests/test_tcp_listener_lifecycle.cpp)
+target_link_libraries(test_tcp_listener_lifecycle PRIVATE pypilot_event_loop)
+
+add_executable(test_tcp_close_closes_clients tests/test_tcp_close_closes_clients.cpp)
+target_link_libraries(test_tcp_close_closes_clients PRIVATE pypilot_event_loop)
+
 add_portable_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.ino)
 add_portable_example(line_protocol_example examples/LineProtocolExample/LineProtocolExample.ino)
 add_portable_example(fixed_header_protocol_example examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino)
@@ -68,6 +77,9 @@ target_link_libraries(tcp_line_server_example PRIVATE pypilot_event_loop)
 
 add_executable(tcp_fixed_header_server_example examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp)
 target_link_libraries(tcp_fixed_header_server_example PRIVATE pypilot_event_loop)
+
+add_executable(tcp_disconnect_server_example examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp)
+target_link_libraries(tcp_disconnect_server_example PRIVATE pypilot_event_loop)
 
 enable_testing()
 add_test(NAME test_timer COMMAND test_timer)
@@ -81,3 +93,6 @@ add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)
 add_test(NAME test_tcp_line_server COMMAND test_tcp_line_server)
 add_test(NAME test_tcp_fixed_header_server COMMAND test_tcp_fixed_header_server)
 add_test(NAME test_tcp_server_shutdown COMMAND test_tcp_server_shutdown)
+add_test(NAME test_tcp_disconnect_detection COMMAND test_tcp_disconnect_detection)
+add_test(NAME test_tcp_listener_lifecycle COMMAND test_tcp_listener_lifecycle)
+add_test(NAME test_tcp_close_closes_clients COMMAND test_tcp_close_closes_clients)

@@ -8,21 +8,37 @@
 
 namespace pypilot_event_loop {
 
+/**
+ * Application-facing event-loop facade.
+ *
+ * EventLoop owns the native platform clock and scheduler selected by
+ * native.hpp. On Linux this is the libevent scheduler. On Arduino this is the
+ * cooperative scheduler. The public API is intentionally the same on both
+ * platforms.
+ *
+ * Callback storage is fixed-size. This avoids std::function and heap-heavy
+ * callback allocation in Arduino builds. Increase MaxCallbacks or
+ * CallbackStorageSize when the application needs more/larger captured lambdas.
+ */
 template<size_t MaxCallbacks = 32, size_t CallbackStorageSize = 48>
 class EventLoop {
 public:
     EventLoop() : scheduler_(clock_) {}
 
+    /** Return true when the selected platform backend initialized correctly. */
     bool valid() const { return scheduler_.valid(); }
 
+    /** Register a named runtime task that repeats every period_us microseconds. */
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) {
         return scheduler_.add_periodic(task, period_us);
     }
 
+    /** Register a named runtime task that runs once at absolute due_us. */
     bool add_one_shot(IRuntimeTask& task, uint64_t due_us) {
         return scheduler_.add_one_shot(task, due_us);
     }
 
+    /** Register a lambda/callable that repeats every period_us microseconds. */
     template<typename Callable>
     bool on_repeat_us(uint64_t period_us, Callable callable) {
         CallbackTask<CallbackStorageSize>* task = allocate_callback(callable);
@@ -32,6 +48,7 @@ public:
         return scheduler_.add_periodic(*task, period_us);
     }
 
+    /** Register a lambda/callable that runs once after delay_us microseconds. */
     template<typename Callable>
     bool on_delay_us(uint64_t delay_us, Callable callable) {
         CallbackTask<CallbackStorageSize>* task = allocate_callback(callable);
@@ -41,22 +58,34 @@ public:
         return scheduler_.add_one_shot(*task, clock_.micros() + delay_us);
     }
 
+    /** Register a lambda/callable that repeats every interval_ms milliseconds. */
     template<typename Callable>
-    bool onRepeat(uint32_t interval_ms, Callable callable) {
+    bool on_repeat(uint32_t interval_ms, Callable callable) {
         return on_repeat_us(static_cast<uint64_t>(interval_ms) * 1000ULL, callable);
     }
 
+    /** Register a lambda/callable that runs once after delay_ms milliseconds. */
     template<typename Callable>
-    bool onDelay(uint32_t delay_ms, Callable callable) {
+    bool on_delay(uint32_t delay_ms, Callable callable) {
         return on_delay_us(static_cast<uint64_t>(delay_ms) * 1000ULL, callable);
     }
 
+    /** Poll one loop iteration. This is the method normally called by Arduino loop(). */
     void tick() { scheduler_.run_once(); }
+
+    /** Poll one loop iteration. Same as tick(), but clearer in Linux code. */
     void run_once() { scheduler_.run_once(); }
+
+    /** Run until request_exit() is called. Normal Linux daemon/app entry point. */
     void run_forever() { scheduler_.run_forever(); }
+
+    /** Request exit from run_forever(). */
     void request_exit() { scheduler_.request_exit(); }
 
+    /** Access the native clock for advanced integrations/tests. */
     NativeClock& clock() { return clock_; }
+
+    /** Access the native scheduler for fd readiness or lower-level integrations. */
     NativeScheduler& scheduler() { return scheduler_; }
 
 private:

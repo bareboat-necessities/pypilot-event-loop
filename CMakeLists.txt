@@ -38,6 +38,12 @@ target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
 add_executable(libevent_loop_smoke examples/linux/libevent_loop_smoke.cpp)
 target_link_libraries(libevent_loop_smoke PRIVATE pypilot_event_loop)
 
+add_executable(byte_stream_pipe examples/linux/byte_stream_pipe.cpp)
+target_link_libraries(byte_stream_pipe PRIVATE pypilot_event_loop)
+
+add_executable(datagram_socketpair examples/linux/datagram_socketpair.cpp)
+target_link_libraries(datagram_socketpair PRIVATE pypilot_event_loop)
+
 enable_testing()
 add_test(NAME test_event_queue COMMAND test_event_queue)
 add_test(NAME test_timer COMMAND test_timer)

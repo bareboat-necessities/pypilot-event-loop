@@ -100,6 +100,7 @@ public:
             reinterpret_cast<sockaddr*>(&sin),
             sizeof(sin));
         if (!listener_) {
+            handler_ = nullptr;
             return false;
         }
         evconnlistener_set_error_cb(listener_, &LinuxTcpServer::listener_error_callback);
@@ -290,14 +291,14 @@ inline bool LinuxTcpConnection::read_line(char* dst, size_t max_len, bool strip_
 
 inline void LinuxTcpConnection::read_callback(bufferevent*, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
-    if (self) {
+    if (self && self->bev_) {
         self->handler_.on_data(*self);
     }
 }
 
 inline void LinuxTcpConnection::write_callback(bufferevent*, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
-    if (self) {
+    if (self && self->bev_) {
         self->handler_.on_write_ready(*self);
     }
 }
@@ -319,7 +320,6 @@ inline void LinuxTcpConnection::notify_event(short events) {
         if (owner_) {
             owner_->remove(this);
         }
-        return;
     }
 }
 

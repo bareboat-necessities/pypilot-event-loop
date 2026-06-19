@@ -13,6 +13,7 @@
 #include <event2/buffer.h>
 #include <event2/bufferevent.h>
 #include <event2/listener.h>
+#include <event2/util.h>
 
 #include "pypilot_event_loop/tcp.hpp"
 #include "pypilot_event_loop_linux/libevent_loop.hpp"
@@ -39,6 +40,7 @@ public:
     size_t output_size() const override;
     int read(uint8_t* dst, size_t max_len) override;
     int write(const uint8_t* src, size_t len) override;
+    bool peek(uint8_t* dst, size_t len) override;
     bool read_exact(uint8_t* dst, size_t len) override;
     bool read_line(char* dst, size_t max_len, bool strip_cr = true) override;
 
@@ -253,6 +255,13 @@ inline int LinuxTcpConnection::write(const uint8_t* src, size_t len) {
     return bufferevent_write(bev_, src, len) == 0 ? static_cast<int>(len) : -1;
 }
 
+inline bool LinuxTcpConnection::peek(uint8_t* dst, size_t len) {
+    if (!bev_ || !dst || input_size() < len) {
+        return false;
+    }
+    return evbuffer_copyout(bufferevent_get_input(bev_), dst, len) == static_cast<ev_ssize_t>(len);
+}
+
 inline bool LinuxTcpConnection::read_exact(uint8_t* dst, size_t len) {
     if (!bev_ || !dst || input_size() < len) {
         return false;
@@ -310,6 +319,7 @@ inline void LinuxTcpConnection::notify_event(short events) {
         if (owner_) {
             owner_->remove(this);
         }
+        return;
     }
 }
 

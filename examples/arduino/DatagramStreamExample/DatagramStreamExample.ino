@@ -8,17 +8,17 @@ uint32_t packets_read = 0;
 void setup() {
     Serial.begin(115200);
 
-    event_loop.on_delay(0, []() {
-        const uint8_t msg[] = {'d', 'a', 't', 'a'};
-        stream.send(msg, sizeof(msg));
-    });
-
-    event_loop.on_repeat(1, []() {
+    event_loop.on_readable(stream, []() {
         uint8_t buf[16];
         const int n = stream.recv(buf, sizeof(buf));
         if (n > 0) {
             packets_read++;
         }
+    });
+
+    event_loop.on_delay(0, []() {
+        const uint8_t msg[] = {'d', 'a', 't', 'a'};
+        stream.send(msg, sizeof(msg));
     });
 }
 

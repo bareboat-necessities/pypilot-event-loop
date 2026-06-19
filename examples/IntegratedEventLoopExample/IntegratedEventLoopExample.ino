@@ -18,12 +18,6 @@
 #ifndef PYPILOT_TCP_SERVER_PORT
 #define PYPILOT_TCP_SERVER_PORT 20220
 #endif
-#ifndef PYPILOT_UDP_BROADCAST_HOST
-#define PYPILOT_UDP_BROADCAST_HOST "255.255.255.255"
-#endif
-#ifndef PYPILOT_UDP_PORT
-#define PYPILOT_UDP_PORT 20225
-#endif
 #ifndef PYPILOT_SERIAL_OUT
 #define PYPILOT_SERIAL_OUT Serial1
 #endif
@@ -36,6 +30,13 @@
 #else
 #include <cstdlib>
 #include <iostream>
+#endif
+
+#ifndef PYPILOT_UDP_BROADCAST_HOST
+#define PYPILOT_UDP_BROADCAST_HOST "255.255.255.255"
+#endif
+#ifndef PYPILOT_UDP_PORT
+#define PYPILOT_UDP_PORT 20225
 #endif
 
 #include <string.h>

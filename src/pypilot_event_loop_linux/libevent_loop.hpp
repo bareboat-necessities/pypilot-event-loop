@@ -44,6 +44,8 @@ public:
     }
 
     bool valid() const { return base_ != nullptr; }
+    event_base* base() { return base_; }
+    const event_base* base() const { return base_; }
 
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
         if (!base_ || period_us == 0) {

@@ -6,8 +6,42 @@
 
 using namespace pypilot_event_loop;
 
+template<size_t Capacity>
+class ExamplePinEventSource final : public IPinEventSource {
+public:
+    bool valid() const override { return true; }
+
+    bool push(PinEvent event) {
+        if (count_ >= Capacity) {
+            return false;
+        }
+        event.sequence = ++sequence_;
+        events_[tail_] = event;
+        tail_ = (tail_ + 1) % Capacity;
+        ++count_;
+        return true;
+    }
+
+    bool read_event(PinEvent& event) override {
+        if (count_ == 0) {
+            return false;
+        }
+        event = events_[head_];
+        head_ = (head_ + 1) % Capacity;
+        --count_;
+        return true;
+    }
+
+private:
+    PinEvent events_[Capacity]{};
+    size_t head_ = 0;
+    size_t tail_ = 0;
+    size_t count_ = 0;
+    uint32_t sequence_ = 0;
+};
+
 EventLoop<> event_loop;
-StaticPinEventSource<4> pin_source;
+ExamplePinEventSource<4> pin_source;
 uint32_t pin_events = 0;
 
 void setup_example() {
@@ -30,4 +64,15 @@ void loop_example() {
     event_loop.tick();
 }
 
-PYPILOT_EVENT_LOOP_EXAMPLE_MAIN(setup_example, loop_example)
+#ifdef ARDUINO
+void setup() { setup_example(); }
+void loop() { loop_example(); }
+#else
+int main() {
+    setup_example();
+    for (int i = 0; i < 1000; ++i) {
+        loop_example();
+    }
+    return pin_events == 1 ? 0 : 1;
+}
+#endif

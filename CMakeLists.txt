@@ -19,6 +19,12 @@ target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS} ${
 target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES} ${LIBGPIOD_LIBRARIES})
 target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER} ${LIBGPIOD_CFLAGS_OTHER})
 
+function(add_portable_example target source)
+    set_source_files_properties(${source} PROPERTIES LANGUAGE CXX)
+    add_executable(${target} ${source})
+    target_link_libraries(${target} PRIVATE pypilot_event_loop)
+endfunction()
+
 add_executable(test_timer tests/test_timer.cpp)
 target_link_libraries(test_timer PRIVATE pypilot_event_loop)
 
@@ -43,26 +49,10 @@ target_link_libraries(test_linux_fifo_stream PRIVATE pypilot_event_loop)
 add_executable(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
 target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
 
-add_executable(libevent_loop_smoke examples/linux/libevent_loop_smoke.cpp)
-target_link_libraries(libevent_loop_smoke PRIVATE pypilot_event_loop)
-
-add_executable(byte_stream_pipe examples/linux/byte_stream_pipe.cpp)
-target_link_libraries(byte_stream_pipe PRIVATE pypilot_event_loop)
-
-add_executable(datagram_socketpair examples/linux/datagram_socketpair.cpp)
-target_link_libraries(datagram_socketpair PRIVATE pypilot_event_loop)
-
-add_executable(line_protocol_pipe examples/linux/line_protocol_pipe.cpp)
-target_link_libraries(line_protocol_pipe PRIVATE pypilot_event_loop)
-
-add_executable(fixed_frame_pipe examples/linux/fixed_frame_pipe.cpp)
-target_link_libraries(fixed_frame_pipe PRIVATE pypilot_event_loop)
-
-add_executable(fifo_line_reader examples/linux/fifo_line_reader.cpp)
-target_link_libraries(fifo_line_reader PRIVATE pypilot_event_loop)
-
-add_executable(gpiod_pin_event examples/linux/gpiod_pin_event.cpp)
-target_link_libraries(gpiod_pin_event PRIVATE pypilot_event_loop)
+add_portable_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.ino)
+add_portable_example(line_protocol_example examples/LineProtocolExample/LineProtocolExample.ino)
+add_portable_example(fixed_header_protocol_example examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino)
+add_portable_example(pin_event_example examples/PinEventExample/PinEventExample.ino)
 
 enable_testing()
 add_test(NAME test_timer COMMAND test_timer)

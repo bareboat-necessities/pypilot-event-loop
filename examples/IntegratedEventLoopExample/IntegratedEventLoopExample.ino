@@ -176,9 +176,6 @@ struct ClientHandler final : public ITcpClientHandler {
             serial_write_text("tcp client rx: ");
             serial_write_text(line);
             serial_write_text("\n");
-            tcp_write_text(connection, "client rx: ");
-            tcp_write_text(connection, line);
-            tcp_write_newline(connection);
         }
     }
 

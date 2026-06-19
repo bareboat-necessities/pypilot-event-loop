@@ -124,7 +124,7 @@ private:
                  static_cast<unsigned>(ip[2]), static_cast<unsigned>(ip[3]));
     }
 
-    WiFiClient client_;
+    mutable WiFiClient client_;
     bool active_ = false;
     TcpPeerInfo peer_;
     char line_[256]{};

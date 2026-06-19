@@ -58,7 +58,11 @@ public:
         if (fd_ < 0 || !src || len == 0) {
             return 0;
         }
-        const ssize_t n = ::write(fd_, src, len);
+        int flags = 0;
+#ifdef MSG_NOSIGNAL
+        flags |= MSG_NOSIGNAL;
+#endif
+        const ssize_t n = ::send(fd_, src, len, flags);
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 return 0;
@@ -178,12 +182,20 @@ public:
         peer.port = options.port;
         connection_.attach(fd, peer);
         handler_ = &handler;
-        loop_.add_readable_fd(connection_.native_fd(), *this);
+        if (!loop_.add_readable_fd(connection_.native_fd(), *this)) {
+            const int err = errno ? errno : EINVAL;
+            connection_.close();
+            handler_ = nullptr;
+            handler.on_error(err);
+            return false;
+        }
+        registered_fd_ = connection_.native_fd();
         handler_->on_connect(connection_, connection_.peer());
         return true;
     }
 
     void close() {
+        unregister_fd();
         connection_.close();
         handler_ = nullptr;
     }
@@ -195,17 +207,42 @@ public:
         if (!handler_ || !connection_.valid()) {
             return;
         }
+
         uint8_t probe = 0;
-        if (!connection_.peek(&probe, 1)) {
+        const int fd = connection_.native_fd();
+        const ssize_t n = ::recv(fd, &probe, 1, MSG_PEEK);
+        if (n > 0) {
+            handler_->on_data(connection_);
             return;
         }
-        handler_->on_data(connection_);
+        if (n == 0) {
+            ITcpClientHandler* handler = handler_;
+            handler->on_close(connection_);
+            close();
+            return;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
+            return;
+        }
+
+        const int err = errno;
+        ITcpClientHandler* handler = handler_;
+        handler->on_error(err);
+        close();
     }
 
 private:
+    void unregister_fd() {
+        if (registered_fd_ >= 0) {
+            loop_.remove_fd(registered_fd_, *this);
+            registered_fd_ = -1;
+        }
+    }
+
     LinuxLibeventLoop& loop_;
     ITcpClientHandler* handler_ = nullptr;
     LinuxTcpClientConnection connection_;
+    int registered_fd_ = -1;
 };
 
 } // namespace pypilot_event_loop

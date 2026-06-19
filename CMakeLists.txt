@@ -87,6 +87,9 @@ target_link_libraries(tcp_fixed_header_server_example PRIVATE pypilot_event_loop
 add_executable(tcp_disconnect_server_example examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp)
 target_link_libraries(tcp_disconnect_server_example PRIVATE pypilot_event_loop)
 
+add_executable(linux_fifo_ipc_example examples/LinuxFifoIpcExample/LinuxFifoIpcExample.cpp)
+target_link_libraries(linux_fifo_ipc_example PRIVATE pypilot_event_loop)
+
 enable_testing()
 add_test(NAME test_timer COMMAND test_timer)
 add_test(NAME test_test_scheduler COMMAND test_test_scheduler)

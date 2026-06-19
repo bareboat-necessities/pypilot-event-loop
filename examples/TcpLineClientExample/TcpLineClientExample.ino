@@ -26,6 +26,8 @@ using namespace pypilot_event_loop;
 
 EventLoop<> event_loop;
 NativeTcpClient client(event_loop.scheduler());
+ITcpConnection* active_connection = nullptr;
+uint32_t tx_count = 0;
 
 static void print_text(const char* text) {
 #if defined(ARDUINO)
@@ -35,35 +37,71 @@ static void print_text(const char* text) {
 #endif
 }
 
-static void write_line(ITcpConnection& connection, const char* text) {
+static void tcp_write_text(ITcpConnection& connection, const char* text) {
     connection.write(reinterpret_cast<const uint8_t*>(text), strlen(text));
+}
+
+static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
+    char digits[10];
+    size_t n = 0;
+    do {
+        digits[n++] = static_cast<char>('0' + (value % 10));
+        value /= 10;
+    } while (value > 0 && n < sizeof(digits));
+    while (n > 0) {
+        const char c = digits[--n];
+        connection.write(reinterpret_cast<const uint8_t*>(&c), 1);
+    }
+}
+
+static void tcp_write_newline(ITcpConnection& connection) {
     const uint8_t newline = '\n';
     connection.write(&newline, 1);
+}
+
+static void tcp_write_line(ITcpConnection& connection, const char* text) {
+    tcp_write_text(connection, text);
+    tcp_write_newline(connection);
+}
+
+static void write_periodic_tcp_line() {
+    if (!active_connection || !active_connection->valid()) {
+        return;
+    }
+    tcp_write_text(*active_connection, "tx: ");
+    tcp_write_uint32(*active_connection, tx_count++);
+    tcp_write_newline(*active_connection);
 }
 
 struct LineClientHandler final : public ITcpClientHandler {
     void on_connect(ITcpConnection& connection, const TcpPeerInfo& peer) override {
         (void)peer;
+        active_connection = &connection;
         print_text("connected\n");
-        write_line(connection, "hello from pypilot-event-loop");
+        tcp_write_line(connection, "tx: connected");
     }
 
     void on_data(ITcpConnection& connection) override {
         char line[160];
         while (connection.read_line(line, sizeof(line))) {
-            print_text("line: ");
+            print_text("rx: ");
             print_text(line);
             print_text("\n");
+            tcp_write_text(connection, "rx: ");
+            tcp_write_text(connection, line);
+            tcp_write_newline(connection);
         }
     }
 
     void on_close(ITcpConnection& connection) override {
         (void)connection;
+        active_connection = nullptr;
         print_text("closed\n");
     }
 
     void on_error(int error_code) override {
         (void)error_code;
+        active_connection = nullptr;
         print_text("tcp client error\n");
     }
 };
@@ -86,6 +124,9 @@ void setup() {
     options.host = PYPILOT_TCP_HOST;
     options.port = PYPILOT_TCP_PORT;
     client.connect(options, handler);
+    event_loop.on_repeat(1000, []() {
+        write_periodic_tcp_line();
+    });
 }
 
 void loop() {
@@ -99,6 +140,9 @@ int main(int argc, char** argv) {
     if (!client.connect(options, handler)) {
         return 1;
     }
+    event_loop.on_repeat(1000, []() {
+        write_periodic_tcp_line();
+    });
     event_loop.run_forever();
     return 0;
 }

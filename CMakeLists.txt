@@ -29,6 +29,9 @@ target_link_libraries(test_test_scheduler PRIVATE pypilot_event_loop)
 add_executable(test_memory_stream tests/test_memory_stream.cpp)
 target_link_libraries(test_memory_stream PRIVATE pypilot_event_loop)
 
+add_executable(test_callback_task tests/test_callback_task.cpp)
+target_link_libraries(test_callback_task PRIVATE pypilot_event_loop)
+
 add_executable(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
 target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
 
@@ -40,4 +43,5 @@ add_test(NAME test_event_queue COMMAND test_event_queue)
 add_test(NAME test_timer COMMAND test_timer)
 add_test(NAME test_test_scheduler COMMAND test_test_scheduler)
 add_test(NAME test_memory_stream COMMAND test_memory_stream)
+add_test(NAME test_callback_task COMMAND test_callback_task)
 add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)

@@ -6,6 +6,7 @@
 #include "byte_stream.hpp"
 #include "callback_task.hpp"
 #include "datagram_stream.hpp"
+#include "event_handle.hpp"
 #include "native.hpp"
 #include "pin_event.hpp"
 
@@ -26,13 +27,58 @@ namespace pypilot_event_loop {
 template<size_t MaxCallbacks = 32, size_t CallbackStorageSize = 64>
 class EventLoop {
 public:
-    EventLoop() : scheduler_(clock_) {}
+    EventLoop() : scheduler_(clock_) {
+        static_assert(MaxCallbacks <= 0xfffeu, "EventLoop supports at most 65534 callback slots");
+    }
 
     /** Default cooperative readiness check period for streams or pins without fd readiness. */
-    static constexpr uint64_t default_readable_poll_us = 1000ULL;
+    static constexpr uint64_t default_readiness_poll_us = 1000ULL;
 
     /** Return true when the selected platform backend initialized correctly. */
     bool valid() const { return scheduler_.valid(); }
+
+    /** Return true when an event handle still names an active slot in this loop. */
+    bool valid(EventHandle handle) const {
+        return handle.assigned() &&
+               handle.slot < MaxCallbacks &&
+               callback_used_[handle.slot] &&
+               callback_tasks_[handle.slot].active() &&
+               callback_generations_[handle.slot] == handle.generation;
+    }
+
+    /** Enable a previously registered callback slot. */
+    bool enable(EventHandle handle) {
+        if (!valid(handle)) {
+            return false;
+        }
+        callback_tasks_[handle.slot].set_enabled(true);
+        return true;
+    }
+
+    /** Disable a callback slot without destroying its stored callable. */
+    bool disable(EventHandle handle) {
+        if (!valid(handle)) {
+            return false;
+        }
+        callback_tasks_[handle.slot].set_enabled(false);
+        return true;
+    }
+
+    /**
+     * Remove a callback slot.
+     *
+     * The current scheduler interfaces do not support unscheduling yet, so the
+     * backend may still poll the slot object. The slot is cleared and generation
+     * is incremented, making the old handle invalid and the callback harmless.
+     */
+    bool remove(EventHandle handle) {
+        if (!valid(handle)) {
+            return false;
+        }
+        callback_tasks_[handle.slot].clear();
+        ++callback_generations_[handle.slot];
+        return true;
+    }
 
     /** Register a named runtime task that repeats every period_us microseconds. */
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) {
@@ -46,77 +92,88 @@ public:
 
     /** Register a lambda/callable that repeats every period_us microseconds. */
     template<typename Callable>
-    bool on_repeat_us(uint64_t period_us, Callable callable) {
-        CallbackTask<CallbackStorageSize>* task = allocate_callback(callable);
-        if (!task) {
-            return false;
+    EventHandle on_repeat_us(uint64_t period_us, Callable callable) {
+        const EventHandle handle = allocate_callback(callable);
+        if (!handle.assigned()) {
+            return EventHandle{};
         }
-        return scheduler_.add_periodic(*task, period_us);
+        if (!scheduler_.add_periodic(callback_tasks_[handle.slot], period_us)) {
+            release_unregistered(handle);
+            return EventHandle{};
+        }
+        return handle;
     }
 
     /** Register a lambda/callable that runs once after delay_us microseconds. */
     template<typename Callable>
-    bool on_delay_us(uint64_t delay_us, Callable callable) {
-        CallbackTask<CallbackStorageSize>* task = allocate_callback(callable);
-        if (!task) {
-            return false;
+    EventHandle on_delay_us(uint64_t delay_us, Callable callable) {
+        const EventHandle handle = allocate_callback(callable);
+        if (!handle.assigned()) {
+            return EventHandle{};
         }
-        return scheduler_.add_one_shot(*task, clock_.micros() + delay_us);
+        if (!scheduler_.add_one_shot(callback_tasks_[handle.slot], clock_.micros() + delay_us)) {
+            release_unregistered(handle);
+            return EventHandle{};
+        }
+        return handle;
     }
 
     /** Register a lambda/callable that repeats every interval_ms milliseconds. */
     template<typename Callable>
-    bool on_repeat(uint32_t interval_ms, Callable callable) {
+    EventHandle on_repeat(uint32_t interval_ms, Callable callable) {
         return on_repeat_us(static_cast<uint64_t>(interval_ms) * 1000ULL, callable);
     }
 
     /** Register a lambda/callable that runs once after delay_ms milliseconds. */
     template<typename Callable>
-    bool on_delay(uint32_t delay_ms, Callable callable) {
+    EventHandle on_delay(uint32_t delay_ms, Callable callable) {
         return on_delay_us(static_cast<uint64_t>(delay_ms) * 1000ULL, callable);
     }
 
     /**
-     * Register a byte-stream readable callback.
+     * Register a byte-stream data-ready callback.
      *
      * Linux fd-backed streams are registered with the native libevent fd
      * readiness backend. Streams without a native fd, such as Arduino Stream
      * wrappers or static test streams, are checked cooperatively from tick().
      */
     template<typename Callable>
-    bool on_readable(IByteStream& stream,
-                     Callable callable,
-                     uint64_t cooperative_poll_us = default_readable_poll_us) {
-        CallbackTask<CallbackStorageSize>* task = allocate_callback([&stream, callable]() mutable {
+    EventHandle on_bytes_ready(IByteStream& stream,
+                               Callable callable,
+                               uint64_t cooperative_poll_us = default_readiness_poll_us) {
+        const EventHandle handle = allocate_callback([&stream, callable]() mutable {
             if (stream.readable()) {
                 callable();
             }
         });
-        if (!task) {
-            return false;
+        if (!handle.assigned()) {
+            return EventHandle{};
         }
-        return register_readable_or_poll(stream.native_fd(), *task, cooperative_poll_us);
+        if (!register_readiness_or_poll(stream.native_fd(), callback_tasks_[handle.slot], cooperative_poll_us)) {
+            release_unregistered(handle);
+            return EventHandle{};
+        }
+        return handle;
     }
 
-    /**
-     * Register a datagram-stream readable callback.
-     *
-     * Linux fd-backed datagram streams are registered with libevent fd
-     * readiness. Streams without a native fd are checked cooperatively.
-     */
+    /** Register a datagram-stream data-ready callback. */
     template<typename Callable>
-    bool on_readable(IDatagramStream& stream,
-                     Callable callable,
-                     uint64_t cooperative_poll_us = default_readable_poll_us) {
-        CallbackTask<CallbackStorageSize>* task = allocate_callback([&stream, callable]() mutable {
+    EventHandle on_bytes_ready(IDatagramStream& stream,
+                               Callable callable,
+                               uint64_t cooperative_poll_us = default_readiness_poll_us) {
+        const EventHandle handle = allocate_callback([&stream, callable]() mutable {
             if (stream.readable()) {
                 callable();
             }
         });
-        if (!task) {
-            return false;
+        if (!handle.assigned()) {
+            return EventHandle{};
         }
-        return register_readable_or_poll(stream.native_fd(), *task, cooperative_poll_us);
+        if (!register_readiness_or_poll(stream.native_fd(), callback_tasks_[handle.slot], cooperative_poll_us)) {
+            release_unregistered(handle);
+            return EventHandle{};
+        }
+        return handle;
     }
 
     /**
@@ -127,19 +184,23 @@ public:
      * tick(). The callable must accept `const PinEvent&`.
      */
     template<typename Callable>
-    bool on_pin_event(IPinEventSource& source,
-                      Callable callable,
-                      uint64_t cooperative_poll_us = default_readable_poll_us) {
-        CallbackTask<CallbackStorageSize>* task = allocate_callback([&source, callable]() mutable {
+    EventHandle on_pin_event(IPinEventSource& source,
+                             Callable callable,
+                             uint64_t cooperative_poll_us = default_readiness_poll_us) {
+        const EventHandle handle = allocate_callback([&source, callable]() mutable {
             PinEvent event;
             while (source.read_event(event)) {
                 callable(event);
             }
         });
-        if (!task) {
-            return false;
+        if (!handle.assigned()) {
+            return EventHandle{};
         }
-        return register_readable_or_poll(source.native_fd(), *task, cooperative_poll_us);
+        if (!register_readiness_or_poll(source.native_fd(), callback_tasks_[handle.slot], cooperative_poll_us)) {
+            release_unregistered(handle);
+            return EventHandle{};
+        }
+        return handle;
     }
 
     /** Poll one loop iteration. This is the method normally called by Arduino loop(). */
@@ -162,18 +223,27 @@ public:
 
 private:
     template<typename Callable>
-    CallbackTask<CallbackStorageSize>* allocate_callback(Callable callable) {
+    EventHandle allocate_callback(Callable callable) {
         for (size_t i = 0; i < MaxCallbacks; ++i) {
             if (!callback_used_[i]) {
                 callback_tasks_[i].set(callable);
                 callback_used_[i] = true;
-                return &callback_tasks_[i];
+                return EventHandle{static_cast<uint16_t>(i), callback_generations_[i]};
             }
         }
-        return nullptr;
+        return EventHandle{};
     }
 
-    bool register_readable_or_poll(int fd, IRuntimeTask& task, uint64_t cooperative_poll_us) {
+    void release_unregistered(EventHandle handle) {
+        if (!handle.assigned() || handle.slot >= MaxCallbacks) {
+            return;
+        }
+        callback_tasks_[handle.slot].clear();
+        callback_used_[handle.slot] = false;
+        ++callback_generations_[handle.slot];
+    }
+
+    bool register_readiness_or_poll(int fd, IRuntimeTask& task, uint64_t cooperative_poll_us) {
 #if defined(__linux__)
         if (fd >= 0) {
             return scheduler_.add_readable_fd(fd, task);
@@ -182,7 +252,7 @@ private:
         (void)fd;
 #endif
         if (cooperative_poll_us == 0) {
-            cooperative_poll_us = default_readable_poll_us;
+            cooperative_poll_us = default_readiness_poll_us;
         }
         return scheduler_.add_periodic(task, cooperative_poll_us);
     }
@@ -190,6 +260,7 @@ private:
     NativeClock clock_;
     NativeScheduler scheduler_;
     CallbackTask<CallbackStorageSize> callback_tasks_[MaxCallbacks];
+    uint16_t callback_generations_[MaxCallbacks]{};
     bool callback_used_[MaxCallbacks]{};
 };
 

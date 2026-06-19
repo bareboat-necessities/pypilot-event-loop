@@ -2,7 +2,7 @@
 
 Portable event-loop and scheduling abstraction for the modular C++ pypilot port.
 
-The module provides a Linux backend using libevent and an Arduino cooperative backend. Normal application code uses the same `EventLoop`, stream, protocol-reader, pin-event, and TCP interfaces where the platform supports them.
+The module provides a Linux backend using libevent and an Arduino cooperative backend. Normal application code uses the same `EventLoop`, stream, protocol-reader, pin-event, UDP, and TCP interfaces where the platform supports them.
 
 ## Public model
 
@@ -16,10 +16,11 @@ The public API exposes:
 - line-delimited protocol readers
 - fixed-size frame protocol readers
 - header+payload protocol readers
+- UDP datagram interfaces with broadcast sender and receiver examples
 - TCP listener/connection interfaces
 - TCP client connection interfaces
-- Linux TCP backend using libevent fd readiness/listener/bufferevent/evbuffer
-- Arduino TCP backend using WiFi only, gated by `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP`
+- Linux UDP/TCP backends using libevent fd readiness and native sockets
+- Arduino UDP/TCP backends using WiFi only, gated by `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` or `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP`
 - Linux named FIFO byte streams for runtime/backend code
 - native serial stream aliases for Arduino `Serial` and Linux tty devices
 - event handles for enable/disable/remove
@@ -117,6 +118,27 @@ Linux run example:
 
 Send newline-delimited messages. The example echoes each received line as `line: ...`.
 
+## UDP datagram API
+
+Linux exposes `NativeUdpDatagramStream` using IPv4 UDP sockets. Arduino exposes the same alias only when `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` is defined before including `pypilot_event_loop.hpp`. The Arduino UDP backend is WiFi-only and uses `WiFiUDP`.
+
+```cpp
+#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
+#include <pypilot_event_loop.hpp>
+```
+
+Linux broadcast sender example:
+
+```bash
+./build/udp_broadcast_sender_example 255.255.255.255 20225
+```
+
+Linux receiver example:
+
+```bash
+./build/udp_receiver_example 20225
+```
+
 ## TCP server and client API
 
 Linux exposes `NativeTcpServer` and `NativeTcpClient`. Arduino exposes the same aliases only when `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP` is defined before including `pypilot_event_loop.hpp`. The Arduino TCP backend is WiFi-only and uses `WiFiServer`/`WiFiClient`; it does not pull in Ethernet or non-WiFi transports.
@@ -154,6 +176,13 @@ examples/SerialLineProtocolExample/SerialLineProtocolExample.ino
 examples/PinEventExample/PinEventExample.ino
 ```
 
+Linux/Arduino-WiFi UDP examples:
+
+```text
+examples/UdpBroadcastSenderExample/UdpBroadcastSenderExample.ino
+examples/UdpReceiverExample/UdpReceiverExample.ino
+```
+
 Linux/Arduino-WiFi TCP examples:
 
 ```text
@@ -169,7 +198,7 @@ examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp
 examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp
 ```
 
-The TCP examples demonstrate connect, listen, accept, readable data, line echo, peer disconnect detection, listener shutdown, and active client shutdown.
+The UDP examples demonstrate periodic broadcast send and event-loop-driven datagram receive. The TCP examples demonstrate connect, listen, accept, readable data, line echo, peer disconnect detection, listener shutdown, and active client shutdown.
 
 ## Build on Linux
 
@@ -190,13 +219,7 @@ arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/SerialLinePro
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample
 ```
 
-WiFi TCP examples require a WiFi-capable Arduino core such as ESP32 and compile-time WiFi credentials/host macros, for example:
-
-```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 --libraries . \
-  --build-property build.extra_flags='-DPYPILOT_WIFI_SSID="ssid" -DPYPILOT_WIFI_PASSWORD="password" -DPYPILOT_TCP_HOST="192.168.1.10" -DPYPILOT_TCP_PORT=20220' \
-  examples/TcpLineClientExample
-```
+WiFi UDP/TCP examples require a WiFi-capable Arduino core such as ESP32 and compile-time WiFi credentials/host macros.
 
 ## OpenWRT note
 

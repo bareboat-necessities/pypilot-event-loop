@@ -22,7 +22,8 @@ The core APIs expose:
 - digital pin input abstraction
 - pin event tasks
 - lambda-backed pin event tasks
-- fixed-size event queues
+- bounded event queues with overflow policies
+- SPSC event queues for interrupt/single-producer handoff
 - fixed-storage callback tasks
 - `EventLoop` callback facade
 - native platform clock alias
@@ -69,6 +70,34 @@ event_loop.on_readable(stream, [&]() {
 ```
 
 On Linux, fd-backed streams return `native_fd() >= 0` and are registered with libevent fd readiness. On Arduino and static streams, `native_fd() == -1`, so the same callback is checked cooperatively from `tick()`.
+
+## Event queues
+
+Normal runtime queue:
+
+```cpp
+pypilot_event_loop::BoundedEventQueue<32,
+    pypilot_event_loop::EventQueueOverflowPolicy::DropOldest> queue;
+```
+
+Available overflow policies:
+
+```text
+RejectNew
+DropOldest
+DropNewest
+CoalesceBySource
+```
+
+The queue assigns sequence numbers, tracks pushed/popped/dropped/coalesced counts, and exposes overflow diagnostics.
+
+Interrupt/single-producer handoff queue:
+
+```cpp
+pypilot_event_loop::SpscEventQueue<16> queue;
+```
+
+Use this for small POD event handoff from interrupt-like producer context to the normal event loop. Do not use it as a general multi-producer Linux work queue.
 
 ## Pin event API
 

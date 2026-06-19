@@ -15,8 +15,9 @@ The core APIs expose:
 - one-shot timers
 - byte streams
 - datagram streams
-- stream readiness callbacks
+- byte/data-ready callbacks
 - native file descriptor integration for Linux streams
+- event handles for enable/disable/remove
 - static byte streams for portable tests/examples
 - static datagram streams for portable tests/examples
 - sampled digital pin input abstraction
@@ -46,9 +47,13 @@ Use this style in normal code:
 
 pypilot_event_loop::EventLoop<> event_loop;
 
-event_loop.on_repeat(1000, []() {
+pypilot_event_loop::EventHandle repeat = event_loop.on_repeat(1000, []() {
     // runs once per second
 });
+
+event_loop.disable(repeat);
+event_loop.enable(repeat);
+event_loop.remove(repeat);
 
 event_loop.on_delay(500, []() {
     // runs once after 500 ms
@@ -57,14 +62,14 @@ event_loop.on_delay(500, []() {
 
 On Linux, `EventLoop` uses the libevent backend. On Arduino, it uses the cooperative Arduino backend.
 
-## Stream readiness API
+## Byte/data-ready API
 
-Use `on_readable()` for byte and datagram input. Do not poll streams by timer in application code.
+Use `on_bytes_ready()` for raw byte and datagram input. Do not poll streams by timer in application code.
 
 ```cpp
 pypilot_event_loop::EventLoop<> event_loop;
 
-event_loop.on_readable(stream, [&]() {
+pypilot_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() {
     uint8_t buf[128];
     const int n = stream.read(buf, sizeof(buf));
     if (n > 0) {
@@ -73,7 +78,7 @@ event_loop.on_readable(stream, [&]() {
 });
 ```
 
-On Linux, fd-backed streams return `native_fd() >= 0` and are registered with libevent fd readiness. On Arduino and static streams, `native_fd() == -1`, so the same callback is checked cooperatively from `tick()`.
+On Linux, fd-backed streams return `native_fd() >= 0` and are registered with libevent fd readiness internally. On Arduino and static streams, `native_fd() == -1`, so the same callback is checked cooperatively from `tick()`.
 
 ## Event queues
 
@@ -149,7 +154,7 @@ pypilot_event_loop::NativeScheduler scheduler(clock);
 
 ## Byte stream examples
 
-The Linux and Arduino byte stream examples use the same public readiness API: `EventLoop<>` and `on_readable()`.
+The Linux and Arduino byte stream examples use the same public data-ready API: `EventLoop<>` and `on_bytes_ready()`.
 
 ```text
 examples/linux/byte_stream_pipe.cpp
@@ -158,7 +163,7 @@ examples/arduino/SerialByteStreamEcho/SerialByteStreamEcho.ino
 
 ## Datagram stream examples
 
-The Linux and Arduino datagram examples use the same public readiness API: `EventLoop<>` and `on_readable()`.
+The Linux and Arduino datagram examples use the same public data-ready API: `EventLoop<>` and `on_bytes_ready()`.
 
 ```text
 examples/linux/datagram_socketpair.cpp

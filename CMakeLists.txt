@@ -1,0 +1,43 @@
+cmake_minimum_required(VERSION 3.16)
+project(pypilot_event_loop LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBEVENT REQUIRED libevent)
+
+add_library(pypilot_event_loop INTERFACE)
+target_include_directories(pypilot_event_loop INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${LIBEVENT_INCLUDE_DIRS}
+)
+target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES})
+target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER})
+
+add_executable(test_event_queue tests/test_event_queue.cpp)
+target_link_libraries(test_event_queue PRIVATE pypilot_event_loop)
+
+add_executable(test_timer tests/test_timer.cpp)
+target_link_libraries(test_timer PRIVATE pypilot_event_loop)
+
+add_executable(test_test_scheduler tests/test_test_scheduler.cpp)
+target_link_libraries(test_test_scheduler PRIVATE pypilot_event_loop)
+
+add_executable(test_memory_stream tests/test_memory_stream.cpp)
+target_link_libraries(test_memory_stream PRIVATE pypilot_event_loop)
+
+add_executable(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
+target_link_libraries(test_linux_libevent_loop PRIVATE pypilot_event_loop)
+
+add_executable(libevent_loop_smoke examples/linux/libevent_loop_smoke.cpp)
+target_link_libraries(libevent_loop_smoke PRIVATE pypilot_event_loop)
+
+enable_testing()
+add_test(NAME test_event_queue COMMAND test_event_queue)
+add_test(NAME test_timer COMMAND test_timer)
+add_test(NAME test_test_scheduler COMMAND test_test_scheduler)
+add_test(NAME test_memory_stream COMMAND test_memory_stream)
+add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)

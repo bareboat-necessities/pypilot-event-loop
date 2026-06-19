@@ -20,6 +20,9 @@ target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER})
 add_executable(test_event_queue tests/test_event_queue.cpp)
 target_link_libraries(test_event_queue PRIVATE pypilot_event_loop)
 
+add_executable(test_spsc_event_queue tests/test_spsc_event_queue.cpp)
+target_link_libraries(test_spsc_event_queue PRIVATE pypilot_event_loop)
+
 add_executable(test_timer tests/test_timer.cpp)
 target_link_libraries(test_timer PRIVATE pypilot_event_loop)
 
@@ -52,6 +55,7 @@ target_link_libraries(datagram_socketpair PRIVATE pypilot_event_loop)
 
 enable_testing()
 add_test(NAME test_event_queue COMMAND test_event_queue)
+add_test(NAME test_spsc_event_queue COMMAND test_spsc_event_queue)
 add_test(NAME test_timer COMMAND test_timer)
 add_test(NAME test_test_scheduler COMMAND test_test_scheduler)
 add_test(NAME test_memory_stream COMMAND test_memory_stream)

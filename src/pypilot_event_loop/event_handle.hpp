@@ -13,10 +13,16 @@ namespace pypilot_event_loop {
  * and clears the callback but does not reclaim the slot for reuse.
  */
 struct EventHandle {
-    uint16_t slot = 0xffffu;
+    static constexpr uint16_t invalid_slot = 0xffffu;
+
+    constexpr EventHandle() = default;
+    constexpr EventHandle(uint16_t slot_value, uint16_t generation_value)
+        : slot(slot_value), generation(generation_value) {}
+
+    uint16_t slot = invalid_slot;
     uint16_t generation = 0;
 
-    bool assigned() const { return slot != 0xffffu; }
+    bool assigned() const { return slot != invalid_slot; }
     explicit operator bool() const { return assigned(); }
 };
 

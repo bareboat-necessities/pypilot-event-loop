@@ -58,10 +58,10 @@ private:
     TcpPeerInfo peer_;
 };
 
-template<size_t MaxConnections = 16>
 class LinuxTcpServer final {
 public:
-    explicit LinuxTcpServer(LinuxLibeventLoop& loop) : loop_(loop) {}
+    explicit LinuxTcpServer(LinuxLibeventLoop& loop, size_t max_connections = 16)
+        : loop_(loop), max_connections_(max_connections) {}
 
     LinuxTcpServer(const LinuxTcpServer&) = delete;
     LinuxTcpServer& operator=(const LinuxTcpServer&) = delete;
@@ -141,7 +141,7 @@ private:
             evutil_closesocket(fd);
             return;
         }
-        if (self->connections_.size() >= MaxConnections) {
+        if (self->connections_.size() >= self->max_connections_) {
             evutil_closesocket(fd);
             return;
         }
@@ -180,6 +180,7 @@ private:
     }
 
     LinuxLibeventLoop& loop_;
+    size_t max_connections_ = 16;
     evconnlistener* listener_ = nullptr;
     ITcpServerHandler* handler_ = nullptr;
     uint16_t bound_port_ = 0;

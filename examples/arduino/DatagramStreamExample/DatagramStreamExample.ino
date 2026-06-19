@@ -8,7 +8,7 @@ uint32_t packets_read = 0;
 void setup() {
     Serial.begin(115200);
 
-    event_loop.on_readable(stream, []() {
+    event_loop.on_bytes_ready(stream, []() {
         uint8_t buf[16];
         const int n = stream.recv(buf, sizeof(buf));
         if (n > 0) {

@@ -17,7 +17,9 @@ The public API exposes:
 - fixed-size frame protocol readers
 - header+payload protocol readers
 - TCP listener/connection interfaces
-- Linux TCP server backend using libevent listener/bufferevent/evbuffer
+- TCP client connection interfaces
+- Linux TCP backend using libevent fd readiness/listener/bufferevent/evbuffer
+- Arduino TCP backend using WiFi only, gated by `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP`
 - Linux named FIFO byte streams for runtime/backend code
 - native serial stream aliases for Arduino `Serial` and Linux tty devices
 - event handles for enable/disable/remove
@@ -115,31 +117,16 @@ Linux run example:
 
 Send newline-delimited messages. The example echoes each received line as `line: ...`.
 
-## TCP server API
+## TCP server and client API
 
-Linux exposes `NativeTcpServer`, which wraps libevent `evconnlistener` for accepting sockets and `bufferevent`/`evbuffer` for connection I/O.
+Linux exposes `NativeTcpServer` and `NativeTcpClient`. Arduino exposes the same aliases only when `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP` is defined before including `pypilot_event_loop.hpp`. The Arduino TCP backend is WiFi-only and uses `WiFiServer`/`WiFiClient`; it does not pull in Ethernet or non-WiFi transports.
 
 ```cpp
-struct Handler final : pypilot_event_loop::ITcpServerHandler {
-    void on_accept(pypilot_event_loop::ITcpConnection& c,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
-        // accepted connection
-    }
-
-    void on_data(pypilot_event_loop::ITcpConnection& c) override {
-        char line[256];
-        while (c.read_line(line, sizeof(line))) {
-            c.write(reinterpret_cast<const uint8_t*>(line), strlen(line));
-            const uint8_t nl = '\n';
-            c.write(&nl, 1);
-        }
-    }
-
-    void on_close(pypilot_event_loop::ITcpConnection& c) override {
-        // peer disconnected
-    }
-};
+#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
+#include <pypilot_event_loop.hpp>
 ```
+
+Server handlers implement `ITcpServerHandler`; client handlers implement `ITcpClientHandler`. Both use `ITcpConnection` for `read_line()`, `read_exact()`, `write()`, and close handling.
 
 The listener supports reusable bind by default through `TcpListenOptions::reuse_address`. Use `NativeTcpServer::close()` to shut down the listener and close active accepted sockets.
 
@@ -167,15 +154,22 @@ examples/SerialLineProtocolExample/SerialLineProtocolExample.ino
 examples/PinEventExample/PinEventExample.ino
 ```
 
+Linux/Arduino-WiFi TCP examples:
+
+```text
+examples/TcpLineClientExample/TcpLineClientExample.ino
+examples/TcpLineServerExample/TcpLineServerExample.cpp
+examples/TcpLineServerExample/TcpLineServerExample.ino
+```
+
 Linux TCP server examples:
 
 ```text
-examples/TcpLineServerExample/TcpLineServerExample.cpp
 examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp
 examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp
 ```
 
-The TCP examples demonstrate listen, accept, readable data, echo/framing, peer disconnect detection, listener shutdown, and active client shutdown.
+The TCP examples demonstrate connect, listen, accept, readable data, line echo, peer disconnect detection, listener shutdown, and active client shutdown.
 
 ## Build on Linux
 
@@ -194,6 +188,14 @@ arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/LineProtocolE
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/FixedHeaderProtocolExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/SerialLineProtocolExample
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample
+```
+
+WiFi TCP examples require a WiFi-capable Arduino core such as ESP32 and compile-time WiFi credentials/host macros, for example:
+
+```bash
+arduino-cli compile --fqbn esp32:esp32:esp32 --libraries . \
+  --build-property build.extra_flags='-DPYPILOT_WIFI_SSID="ssid" -DPYPILOT_WIFI_PASSWORD="password" -DPYPILOT_TCP_HOST="192.168.1.10" -DPYPILOT_TCP_PORT=20220' \
+  examples/TcpLineClientExample
 ```
 
 ## OpenWRT note

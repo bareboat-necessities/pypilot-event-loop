@@ -11,6 +11,8 @@ class ArduinoLoop final : public IScheduler {
 public:
     explicit ArduinoLoop(IClock& clock) : clock_(clock) {}
 
+    bool valid() const override { return true; }
+
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
         if (period_us == 0) {
             return false;

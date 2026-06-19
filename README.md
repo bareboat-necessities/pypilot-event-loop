@@ -19,7 +19,11 @@ The core APIs expose:
 - native file descriptor integration for Linux streams
 - static byte streams for portable tests/examples
 - static datagram streams for portable tests/examples
-- digital pin input abstraction
+- sampled digital pin input abstraction
+- fd-backed pin event source abstraction
+- Linux libgpiod pin event source
+- legacy Linux sysfs pin event fallback
+- Arduino cooperative pin event source
 - pin event tasks
 - lambda-backed pin event tasks
 - bounded event queues with overflow policies
@@ -101,15 +105,20 @@ Use this for small POD event handoff from interrupt-like producer context to the
 
 ## Pin event API
 
-Use `PinEventTask` when a pin event should invoke a named task:
+Production edge-event sources implement `IPinEventSource` and are registered with `EventLoop::on_pin_event()`:
 
 ```cpp
-pypilot_event_loop::PinEventTask task(pin, target_task,
-                                      pypilot_event_loop::PinEventType::RisingEdge,
-                                      5000);
+pypilot_event_loop::LinuxGpiodPinEventSource pin(
+    "/dev/gpiochip0", 17, pypilot_event_loop::PinEventType::Change);
+
+event_loop.on_pin_event(pin, [](const pypilot_event_loop::PinEvent& event) {
+    // event.source_id, event.sequence, event.timestamp_us, event.level
+});
 ```
 
-Use `LambdaPinEventTask` when a pin event should invoke a lambda:
+Linux gpiod sources expose a native fd, so libevent wakes the callback only when the GPIO request fd is readable. Arduino and other cooperative sources return `native_fd() == -1`, so the same callback is checked from `tick()`.
+
+Sampled pins still use `IPinInput`, `PinEventTask`, and `LambdaPinEventTask` for simpler polling/test cases:
 
 ```cpp
 pypilot_event_loop::LambdaPinEventTask<> task(pin,
@@ -119,7 +128,13 @@ pypilot_event_loop::LambdaPinEventTask<> task(pin,
     });
 ```
 
-The pin abstraction is platform-neutral, so Raspberry Pi GPIO and Arduino digital pins can both adapt to `IPinInput`.
+Available platform sources:
+
+```text
+LinuxGpiodPinEventSource
+LinuxSysfsPinEventSource
+ArduinoDigitalPinEventSource
+```
 
 ## Lower-level common API
 
@@ -150,6 +165,13 @@ examples/linux/datagram_socketpair.cpp
 examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
 ```
 
+## Pin event examples
+
+```text
+examples/linux/gpiod_pin_event.cpp
+examples/arduino/PinEventExample/PinEventExample.ino
+```
+
 ## Linux backend
 
 Linux uses libevent only. There is no raw `poll()` fallback in this module.
@@ -167,7 +189,7 @@ void loop() {
 ## Build on Linux
 
 ```bash
-sudo apt-get install -y libevent-dev pkg-config
+sudo apt-get install -y libevent-dev libgpiod-dev pkg-config
 cmake -S . -B build
 cmake --build build --parallel
 ctest --test-dir build --output-on-failure
@@ -179,8 +201,9 @@ ctest --test-dir build --output-on-failure
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/DatagramStreamExample
+arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEventExample
 ```
 
 ## OpenWRT note
 
-OpenWRT builds should provide libevent in the target SDK/toolchain. If libevent is missing, the Linux backend intentionally fails at configure time.
+OpenWRT builds should provide libevent and libgpiod in the target SDK/toolchain. If either is missing, the Linux backend intentionally fails at configure time.

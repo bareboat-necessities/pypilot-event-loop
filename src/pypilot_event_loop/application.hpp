@@ -3,7 +3,9 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "byte_stream.hpp"
 #include "callback_task.hpp"
+#include "datagram_stream.hpp"
 #include "native.hpp"
 
 namespace pypilot_event_loop {
@@ -20,10 +22,13 @@ namespace pypilot_event_loop {
  * callback allocation in Arduino builds. Increase MaxCallbacks or
  * CallbackStorageSize when the application needs more/larger captured lambdas.
  */
-template<size_t MaxCallbacks = 32, size_t CallbackStorageSize = 48>
+template<size_t MaxCallbacks = 32, size_t CallbackStorageSize = 64>
 class EventLoop {
 public:
     EventLoop() : scheduler_(clock_) {}
+
+    /** Default cooperative readiness check period for streams without fd readiness. */
+    static constexpr uint64_t default_readable_poll_us = 1000ULL;
 
     /** Return true when the selected platform backend initialized correctly. */
     bool valid() const { return scheduler_.valid(); }
@@ -70,6 +75,49 @@ public:
         return on_delay_us(static_cast<uint64_t>(delay_ms) * 1000ULL, callable);
     }
 
+    /**
+     * Register a byte-stream readable callback.
+     *
+     * Linux fd-backed streams are registered with the native libevent fd
+     * readiness backend. Streams without a native fd, such as Arduino Stream
+     * wrappers or static test streams, are checked cooperatively from tick().
+     */
+    template<typename Callable>
+    bool on_readable(IByteStream& stream,
+                     Callable callable,
+                     uint64_t cooperative_poll_us = default_readable_poll_us) {
+        CallbackTask<CallbackStorageSize>* task = allocate_callback([&stream, callable]() mutable {
+            if (stream.readable()) {
+                callable();
+            }
+        });
+        if (!task) {
+            return false;
+        }
+        return register_readable_or_poll(stream.native_fd(), *task, cooperative_poll_us);
+    }
+
+    /**
+     * Register a datagram-stream readable callback.
+     *
+     * Linux fd-backed datagram streams are registered with libevent fd
+     * readiness. Streams without a native fd are checked cooperatively.
+     */
+    template<typename Callable>
+    bool on_readable(IDatagramStream& stream,
+                     Callable callable,
+                     uint64_t cooperative_poll_us = default_readable_poll_us) {
+        CallbackTask<CallbackStorageSize>* task = allocate_callback([&stream, callable]() mutable {
+            if (stream.readable()) {
+                callable();
+            }
+        });
+        if (!task) {
+            return false;
+        }
+        return register_readable_or_poll(stream.native_fd(), *task, cooperative_poll_us);
+    }
+
     /** Poll one loop iteration. This is the method normally called by Arduino loop(). */
     void tick() { scheduler_.run_once(); }
 
@@ -99,6 +147,20 @@ private:
             }
         }
         return nullptr;
+    }
+
+    bool register_readable_or_poll(int fd, IRuntimeTask& task, uint64_t cooperative_poll_us) {
+#if defined(__linux__)
+        if (fd >= 0) {
+            return scheduler_.add_readable_fd(fd, task);
+        }
+#else
+        (void)fd;
+#endif
+        if (cooperative_poll_us == 0) {
+            cooperative_poll_us = default_readable_poll_us;
+        }
+        return scheduler_.add_periodic(task, cooperative_poll_us);
     }
 
     NativeClock clock_;

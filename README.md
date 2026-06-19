@@ -24,17 +24,11 @@ The core APIs expose:
 - event handles for enable/disable/remove
 - static byte streams for portable tests/examples
 - static datagram streams for portable tests/examples
-- sampled digital pin input abstraction
 - fd-backed pin event source abstraction
 - Linux libgpiod pin event source
-- legacy Linux sysfs pin event fallback
 - Arduino cooperative pin event source
 - Arduino interrupt guard
 - Arduino interrupt-backed pin event source
-- pin event tasks
-- lambda-backed pin event tasks
-- bounded event queues with overflow policies
-- SPSC event queues for interrupt/single-producer handoff
 - fixed-storage callback tasks
 - `EventLoop` callback facade
 - native platform clock alias
@@ -45,8 +39,6 @@ The core APIs expose:
 The normal pypilot modules should not include libevent, POSIX socket, or Arduino headers.
 
 ## Common callback API
-
-Use this style in normal code:
 
 ```cpp
 #include <pypilot_event_loop.hpp>
@@ -73,8 +65,6 @@ On Linux, `EventLoop` uses the libevent backend. On Arduino, it uses the coopera
 Use `on_bytes_ready()` for raw byte and datagram input. Do not poll streams by timer in application code.
 
 ```cpp
-pypilot_event_loop::EventLoop<> event_loop;
-
 pypilot_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() {
     uint8_t buf[128];
     const int n = stream.read(buf, sizeof(buf));
@@ -90,8 +80,6 @@ On Linux, fd-backed streams return `native_fd() >= 0` and are registered with li
 
 Use protocol readers when the application should receive complete messages rather than raw readable bytes.
 
-Line-delimited protocol:
-
 ```cpp
 pypilot_event_loop::LineProtocolReader<128> lines(stream, {}, [](pypilot_event_loop::LineView line) {
     // complete line, with optional CR stripping
@@ -102,8 +90,6 @@ event_loop.on_bytes_ready(stream, [&]() {
 });
 ```
 
-Fixed-size frame protocol:
-
 ```cpp
 pypilot_event_loop::FixedFrameProtocolReader<64> frames(
     stream,
@@ -112,8 +98,6 @@ pypilot_event_loop::FixedFrameProtocolReader<64> frames(
         // exactly 32 bytes
     });
 ```
-
-Header+payload protocol:
 
 ```cpp
 pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
@@ -142,37 +126,9 @@ event_loop.on_bytes_ready(fifo, [&]() {
 
 By default, the FIFO is created if missing and opened `O_RDWR | O_NONBLOCK`. This keeps the fd stable when external writers disconnect, which matters because libevent registrations are tied to a specific fd. Use separate input/output FIFOs for bidirectional IPC if the application must avoid reading its own writes.
 
-## Event queues
-
-Normal runtime queue:
-
-```cpp
-pypilot_event_loop::BoundedEventQueue<32,
-    pypilot_event_loop::EventQueueOverflowPolicy::DropOldest> queue;
-```
-
-Available overflow policies:
-
-```text
-RejectNew
-DropOldest
-DropNewest
-CoalesceBySource
-```
-
-The queue assigns sequence numbers, tracks pushed/popped/dropped/coalesced counts, and exposes overflow diagnostics.
-
-Interrupt/single-producer handoff queue:
-
-```cpp
-pypilot_event_loop::SpscEventQueue<16> queue;
-```
-
-Use this for small POD event handoff from interrupt-like producer context to the normal event loop. Do not use it as a general multi-producer Linux work queue.
-
 ## Pin event API
 
-Production edge-event sources implement `IPinEventSource` and are registered with `EventLoop::on_pin_event()`:
+Production edge/state sources implement `IPinEventSource` and are registered with `EventLoop::on_pin_event()`.
 
 ```cpp
 pypilot_event_loop::LinuxGpiodPinEventSource pin(
@@ -183,9 +139,7 @@ event_loop.on_pin_event(pin, [](const pypilot_event_loop::PinEvent& event) {
 });
 ```
 
-Linux gpiod sources expose a native fd, so libevent wakes the callback only when the GPIO request fd is readable. Arduino and other cooperative sources return `native_fd() == -1`, so the same callback is checked from `tick()`.
-
-Sampled pins still use `IPinInput`, `PinEventTask`, and `LambdaPinEventTask` for simpler polling/test cases.
+Linux gpiod sources expose a native fd, so libevent wakes the callback only when the GPIO request fd is readable. Arduino cooperative and interrupt-backed sources return `native_fd() == -1`, so the same callback is checked from `tick()`.
 
 ## Arduino interrupt-backed pin events
 
@@ -212,68 +166,25 @@ Available platform sources:
 
 ```text
 LinuxGpiodPinEventSource
-LinuxSysfsPinEventSource
 ArduinoDigitalPinEventSource
 ArduinoInterruptPinEventSource
 ```
 
-## Lower-level common API
-
-The lower-level API is also platform-neutral:
-
-```cpp
-#include <pypilot_event_loop.hpp>
-
-pypilot_event_loop::NativeClock clock;
-pypilot_event_loop::NativeScheduler scheduler(clock);
-```
-
-## Byte stream examples
-
-The Linux and Arduino byte stream examples use the same public data-ready API: `EventLoop<>` and `on_bytes_ready()`.
+## Examples
 
 ```text
+examples/linux/libevent_loop_smoke.cpp
 examples/linux/byte_stream_pipe.cpp
-examples/arduino/SerialByteStreamEcho/SerialByteStreamEcho.ino
-```
-
-## Datagram stream examples
-
-The Linux and Arduino datagram examples use the same public data-ready API: `EventLoop<>` and `on_bytes_ready()`.
-
-```text
 examples/linux/datagram_socketpair.cpp
-examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
-```
-
-## Protocol examples
-
-```text
 examples/linux/line_protocol_pipe.cpp
 examples/linux/fixed_frame_pipe.cpp
 examples/linux/fifo_line_reader.cpp
-```
-
-## Pin event examples
-
-```text
 examples/linux/gpiod_pin_event.cpp
+examples/arduino/EventLoopSmoke/EventLoopSmoke.ino
+examples/arduino/SerialByteStreamEcho/SerialByteStreamEcho.ino
+examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
 examples/arduino/PinEventExample/PinEventExample.ino
 examples/arduino/InterruptPinEventExample/InterruptPinEventExample.ino
-```
-
-## Linux backend
-
-Linux uses libevent only. There is no raw `poll()` fallback in this module.
-
-## Arduino backend
-
-Arduino can call the same facade from the sketch loop:
-
-```cpp
-void loop() {
-    event_loop.tick();
-}
 ```
 
 ## Build on Linux

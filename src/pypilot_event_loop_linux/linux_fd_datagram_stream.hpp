@@ -22,6 +22,7 @@ public:
     }
 
     int fd() const { return fd_; }
+    int native_fd() const override { return fd_; }
 
     int recv(uint8_t* dst, size_t max_len) override {
         if (fd_ < 0 || !dst || max_len == 0) {

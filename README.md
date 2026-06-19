@@ -2,7 +2,7 @@
 
 Portable event-loop and scheduling abstraction for the modular C++ pypilot port.
 
-The module provides a Linux backend using libevent and an Arduino cooperative loop backend. The portable core hides platform-specific event-loop mechanics from the rest of the pypilot-cpp modules.
+The module provides a Linux backend using libevent and an Arduino cooperative loop backend. Normal application code uses the same public `NativeClock` and `NativeScheduler` aliases on both platforms; the aliases select the platform backend at compile time.
 
 ## Purpose
 
@@ -17,10 +17,25 @@ The core APIs expose:
 - datagram streams
 - fixed-size event queues
 - test scheduler
+- native platform clock alias
+- native platform scheduler alias
 - Linux libevent scheduler
 - Arduino cooperative scheduler
 
 The normal pypilot modules should not include libevent, POSIX socket, or Arduino headers.
+
+## Common API
+
+Use this style in normal code:
+
+```cpp
+#include <pypilot_event_loop.hpp>
+
+pypilot_event_loop::NativeClock clock;
+pypilot_event_loop::NativeScheduler scheduler(clock);
+```
+
+On Linux this resolves to the libevent backend. On Arduino this resolves to the cooperative Arduino backend.
 
 ## Linux backend
 
@@ -28,7 +43,7 @@ Linux uses libevent only. There is no raw `poll()` fallback in this module.
 
 ## Arduino backend
 
-Arduino uses a cooperative scheduler intended to be called from `loop()` through `ArduinoLoop::tick()`.
+Arduino uses the same `NativeClock` and `NativeScheduler` names. Call `scheduler.run_once()` from the sketch `loop()` function.
 
 ## Build on Linux
 

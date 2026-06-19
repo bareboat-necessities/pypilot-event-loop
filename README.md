@@ -56,6 +56,30 @@ pypilot_event_loop::NativeClock clock;
 pypilot_event_loop::NativeScheduler scheduler(clock);
 ```
 
+## Byte stream example
+
+Linux pipe-backed byte stream usage is in:
+
+```text
+examples/linux/byte_stream_pipe.cpp
+```
+
+Arduino Serial byte stream usage is in:
+
+```text
+examples/arduino/SerialByteStreamEcho/SerialByteStreamEcho.ino
+```
+
+## Datagram stream example
+
+Linux datagram stream usage is in:
+
+```text
+examples/linux/datagram_socketpair.cpp
+```
+
+It uses a local `socketpair(AF_UNIX, SOCK_DGRAM, ...)` so the example does not need a network interface.
+
 ## Linux backend
 
 Linux uses libevent only. There is no raw `poll()` fallback in this module.
@@ -79,10 +103,11 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-## Arduino compile smoke test
+## Arduino compile smoke tests
 
 ```bash
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke
+arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho
 ```
 
 ## OpenWRT note

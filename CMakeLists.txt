@@ -67,6 +67,9 @@ target_link_libraries(line_protocol_pipe PRIVATE pypilot_event_loop)
 add_executable(fixed_frame_pipe examples/linux/fixed_frame_pipe.cpp)
 target_link_libraries(fixed_frame_pipe PRIVATE pypilot_event_loop)
 
+add_executable(fifo_line_reader examples/linux/fifo_line_reader.cpp)
+target_link_libraries(fifo_line_reader PRIVATE pypilot_event_loop)
+
 add_executable(gpiod_pin_event examples/linux/gpiod_pin_event.cpp)
 target_link_libraries(gpiod_pin_event PRIVATE pypilot_event_loop)
 

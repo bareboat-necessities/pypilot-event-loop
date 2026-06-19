@@ -3,42 +3,10 @@
 #endif
 
 #include <pypilot_event_loop.hpp>
+#include "../support/example_pin_event_source.hpp"
 
 using namespace pypilot_event_loop;
-
-template<size_t Capacity>
-class ExamplePinEventSource final : public IPinEventSource {
-public:
-    bool valid() const override { return true; }
-
-    bool push(PinEvent event) {
-        if (count_ >= Capacity) {
-            return false;
-        }
-        event.sequence = ++sequence_;
-        events_[tail_] = event;
-        tail_ = (tail_ + 1) % Capacity;
-        ++count_;
-        return true;
-    }
-
-    bool read_event(PinEvent& event) override {
-        if (count_ == 0) {
-            return false;
-        }
-        event = events_[head_];
-        head_ = (head_ + 1) % Capacity;
-        --count_;
-        return true;
-    }
-
-private:
-    PinEvent events_[Capacity]{};
-    size_t head_ = 0;
-    size_t tail_ = 0;
-    size_t count_ = 0;
-    uint32_t sequence_ = 0;
-};
+using pypilot_event_loop_examples::ExamplePinEventSource;
 
 EventLoop<> event_loop;
 ExamplePinEventSource<4> pin_source;

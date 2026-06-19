@@ -7,6 +7,7 @@
 #include "callback_task.hpp"
 #include "datagram_stream.hpp"
 #include "native.hpp"
+#include "pin_event.hpp"
 
 namespace pypilot_event_loop {
 
@@ -27,7 +28,7 @@ class EventLoop {
 public:
     EventLoop() : scheduler_(clock_) {}
 
-    /** Default cooperative readiness check period for streams without fd readiness. */
+    /** Default cooperative readiness check period for streams or pins without fd readiness. */
     static constexpr uint64_t default_readable_poll_us = 1000ULL;
 
     /** Return true when the selected platform backend initialized correctly. */
@@ -116,6 +117,29 @@ public:
             return false;
         }
         return register_readable_or_poll(stream.native_fd(), *task, cooperative_poll_us);
+    }
+
+    /**
+     * Register a GPIO/pin event source callback.
+     *
+     * Linux gpiod-backed sources return a native fd and are integrated with
+     * libevent readiness. Cooperative sources return -1 and are checked from
+     * tick(). The callable must accept `const PinEvent&`.
+     */
+    template<typename Callable>
+    bool on_pin_event(IPinEventSource& source,
+                      Callable callable,
+                      uint64_t cooperative_poll_us = default_readable_poll_us) {
+        CallbackTask<CallbackStorageSize>* task = allocate_callback([&source, callable]() mutable {
+            PinEvent event;
+            while (source.read_event(event)) {
+                callable(event);
+            }
+        });
+        if (!task) {
+            return false;
+        }
+        return register_readable_or_poll(source.native_fd(), *task, cooperative_poll_us);
     }
 
     /** Poll one loop iteration. This is the method normally called by Arduino loop(). */

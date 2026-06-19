@@ -23,3 +23,18 @@ jobs:
 
       - name: Test
         run: ctest --test-dir build --output-on-failure
+
+  arduino:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install AVR core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+
+      - name: Compile Arduino smoke example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke

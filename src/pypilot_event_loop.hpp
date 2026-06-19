@@ -9,6 +9,8 @@
 #include "pypilot_event_loop/event_queue.hpp"
 #include "pypilot_event_loop/byte_stream.hpp"
 #include "pypilot_event_loop/datagram_stream.hpp"
+#include "pypilot_event_loop/static_byte_stream.hpp"
+#include "pypilot_event_loop/static_datagram_stream.hpp"
 #include "pypilot_event_loop/scheduler.hpp"
 #include "pypilot_event_loop/native.hpp"
 #include "pypilot_event_loop/callback_task.hpp"

@@ -15,6 +15,8 @@ The core APIs expose:
 - one-shot timers
 - byte streams
 - datagram streams
+- static byte streams for portable tests/examples
+- static datagram streams for portable tests/examples
 - digital pin input abstraction
 - pin event tasks
 - lambda-backed pin event tasks
@@ -81,29 +83,23 @@ pypilot_event_loop::NativeClock clock;
 pypilot_event_loop::NativeScheduler scheduler(clock);
 ```
 
-## Byte stream example
+## Byte stream examples
 
-Linux pipe-backed byte stream usage is in:
+The Linux and Arduino byte stream examples use the same public API shape: `EventLoop<>`, `StaticByteStream`, `on_delay`, and `on_repeat`.
 
 ```text
 examples/linux/byte_stream_pipe.cpp
-```
-
-Arduino Serial byte stream usage is in:
-
-```text
 examples/arduino/SerialByteStreamEcho/SerialByteStreamEcho.ino
 ```
 
-## Datagram stream example
+## Datagram stream examples
 
-Linux datagram stream usage is in:
+The Linux and Arduino datagram examples use the same public API shape: `EventLoop<>`, `StaticDatagramStream`, `on_delay`, and `on_repeat`.
 
 ```text
 examples/linux/datagram_socketpair.cpp
+examples/arduino/DatagramStreamExample/DatagramStreamExample.ino
 ```
-
-It uses a local `socketpair(AF_UNIX, SOCK_DGRAM, ...)` so the example does not need a network interface.
 
 ## Linux backend
 
@@ -133,6 +129,7 @@ ctest --test-dir build --output-on-failure
 ```bash
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/EventLoopSmoke
 arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/SerialByteStreamEcho
+arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/DatagramStreamExample
 ```
 
 ## OpenWRT note

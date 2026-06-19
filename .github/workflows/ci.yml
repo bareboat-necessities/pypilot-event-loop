@@ -45,5 +45,8 @@ jobs:
       - name: Compile portable fixed header protocol example
         run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/FixedHeaderProtocolExample
 
+      - name: Compile portable serial line protocol example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/SerialLineProtocolExample
+
       - name: Compile portable pin event example
         run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/PinEventExample

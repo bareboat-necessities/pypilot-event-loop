@@ -16,17 +16,16 @@ The public API exposes:
 - line-delimited protocol readers
 - fixed-size frame protocol readers
 - header+payload protocol readers
-- Linux named FIFO byte streams
+- Linux named FIFO byte streams for runtime/backend code
 - event handles for enable/disable/remove
-- static byte streams and static pin-event sources for portable tests/examples
 - `IPinEventSource`
-- Linux gpiod pin events
-- Arduino cooperative and interrupt-backed pin events
+- Linux gpiod pin events for runtime/backend code
+- Arduino cooperative and interrupt-backed pin events for runtime/backend code
 - fixed-storage callback tasks
 - native platform clock/scheduler aliases
 - native console stream alias
 
-The normal pypilot modules should not include libevent, POSIX socket, fd, or Arduino backend headers.
+The normal pypilot modules should not include libevent, POSIX socket, fd, test-support, example-support, or Arduino backend headers.
 
 ## Portable example style
 
@@ -40,7 +39,7 @@ Portable examples use one optional Arduino include block at the top, then includ
 #include <pypilot_event_loop.hpp>
 ```
 
-The rest of the example should use only portable names such as `EventLoop`, `StaticByteStream`, `LineProtocolReader`, and `StaticPinEventSource`.
+Example-only helper streams or sources live inside the example file itself. They are not part of `src/`.
 
 ## Common callback API
 
@@ -111,15 +110,7 @@ By default, the FIFO is created if missing and opened `O_RDWR | O_NONBLOCK`. Thi
 
 Production edge/state sources implement `IPinEventSource` and are registered with `EventLoop::on_pin_event()`.
 
-```cpp
-pypilot_event_loop::StaticPinEventSource<4> source;
-
-event_loop.on_pin_event(source, [](const pypilot_event_loop::PinEvent& event) {
-    // portable pin event callback
-});
-```
-
-Linux runtime code can use `LinuxGpiodPinEventSource`. Arduino runtime code can use `ArduinoDigitalPinEventSource` or `ArduinoInterruptPinEventSource`. Portable examples use `StaticPinEventSource`.
+Linux runtime code can use `LinuxGpiodPinEventSource`. Arduino runtime code can use `ArduinoDigitalPinEventSource` or `ArduinoInterruptPinEventSource`. Portable examples define their own local example source instead of importing backend or test helpers.
 
 ## Examples
 

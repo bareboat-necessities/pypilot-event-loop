@@ -13,7 +13,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libevent-dev pkg-config
+          sudo apt-get install -y libevent-dev libgpiod-dev pkg-config
 
       - name: Configure
         run: cmake -S . -B build
@@ -44,3 +44,6 @@ jobs:
 
       - name: Compile Arduino datagram stream example
         run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/DatagramStreamExample
+
+      - name: Compile Arduino pin event example
+        run: arduino-cli compile --fqbn arduino:avr:mega --libraries . examples/arduino/PinEventExample

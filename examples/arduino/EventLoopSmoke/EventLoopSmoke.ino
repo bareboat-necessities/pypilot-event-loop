@@ -7,7 +7,7 @@ uint32_t tick_count = 0;
 void setup() {
     Serial.begin(115200);
 
-    event_loop.onRepeat(100, []() {
+    event_loop.on_repeat(100, []() {
         tick_count++;
     });
 }

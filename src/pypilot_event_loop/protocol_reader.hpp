@@ -173,7 +173,9 @@ private:
         if (options_.strip_cr && len > 0 && buffer_[len - 1] == '\r') {
             --len;
         }
-        LineView view(buffer_, len);
+        LineView view;
+        view.data = buffer_;
+        view.size = len;
         callback_.invoke(view);
         ++stats_.messages;
         size_ = 0;
@@ -225,7 +227,9 @@ public:
             ++stats_.bytes;
             buffer_[size_++] = byte;
             if (size_ == options_.frame_size) {
-                FrameView view(buffer_, size_);
+                FrameView view;
+                view.data = buffer_;
+                view.size = size_;
                 callback_.invoke(view);
                 ++stats_.messages;
                 size_ = 0;
@@ -321,7 +325,9 @@ private:
         }
 
         if (size_ >= expected_size_) {
-            FrameView view(buffer_, expected_size_);
+            FrameView view;
+            view.data = buffer_;
+            view.size = expected_size_;
             callback_.invoke(view);
             ++stats_.messages;
 

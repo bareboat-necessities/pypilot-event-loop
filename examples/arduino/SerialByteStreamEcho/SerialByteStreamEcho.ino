@@ -8,7 +8,7 @@ pypilot_event_loop::ArduinoSerialStream serial_stream(Serial);
 void setup() {
     Serial.begin(115200);
 
-    event_loop.onRepeat(10, []() {
+    event_loop.on_repeat(10, []() {
         uint8_t buf[32];
         const int n = serial_stream.read(buf, sizeof(buf));
         if (n > 0) {

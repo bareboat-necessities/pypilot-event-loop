@@ -1,28 +1,39 @@
 #include <iostream>
+#include <unistd.h>
 
 #include "pypilot_event_loop.hpp"
+#include "pypilot_event_loop_linux/linux_fd_stream.hpp"
 
 int main() {
+    int fds[2];
+    if (pipe(fds) != 0) {
+        return 1;
+    }
+
     pypilot_event_loop::EventLoop<> event_loop;
-    pypilot_event_loop::StaticByteStream<64> stream;
+    pypilot_event_loop::LinuxFdStream reader(fds[0]);
+    pypilot_event_loop::LinuxFdStream writer(fds[1]);
 
     int bytes_read = 0;
 
-    event_loop.on_delay(0, [&stream]() {
-        const uint8_t msg[] = {'h', 'e', 'l', 'l', 'o'};
-        stream.write(msg, sizeof(msg));
-    });
-
-    event_loop.on_repeat(1, [&event_loop, &stream, &bytes_read]() {
+    event_loop.on_readable(reader, [&]() {
         uint8_t buf[16];
-        const int n = stream.read(buf, sizeof(buf));
+        const int n = reader.read(buf, sizeof(buf));
         if (n > 0) {
             bytes_read += n;
-            std::cout << "byte stream read " << n << " bytes" << std::endl;
+            std::cout << "byte stream readiness read " << n << " bytes" << std::endl;
             event_loop.request_exit();
         }
     });
 
+    event_loop.on_delay(0, [&]() {
+        const uint8_t msg[] = {'h', 'e', 'l', 'l', 'o'};
+        writer.write(msg, sizeof(msg));
+    });
+
     event_loop.run_forever();
+
+    close(fds[0]);
+    close(fds[1]);
     return bytes_read == 5 ? 0 : 1;
 }

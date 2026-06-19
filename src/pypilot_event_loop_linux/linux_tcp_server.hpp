@@ -52,12 +52,15 @@ private:
     static void event_callback(bufferevent* bev, short events, void* ctx);
 
     void notify_event(short events);
+    void close_bev();
     void detach() { owner_ = nullptr; }
+    bool remove_requested() const { return remove_requested_; }
 
     LinuxTcpServer* owner_ = nullptr;
     bufferevent* bev_ = nullptr;
     ITcpServerHandler& handler_;
     TcpPeerInfo peer_;
+    bool remove_requested_ = false;
 };
 
 class LinuxTcpServer final {
@@ -125,16 +128,23 @@ public:
 
     bool valid() const { return listener_ != nullptr; }
     uint16_t port() const { return bound_port_; }
-    size_t connection_count() const { return connections_.size(); }
 
-    void remove(LinuxTcpConnection* connection) {
-        for (auto it = connections_.begin(); it != connections_.end(); ++it) {
-            if (it->get() == connection) {
-                (*it)->detach();
-                connections_.erase(it);
-                return;
+    size_t connection_count() const {
+        size_t count = 0;
+        for (const auto& connection : connections_) {
+            if (connection && connection->valid()) {
+                ++count;
             }
         }
+        return count;
+    }
+
+    void remove(LinuxTcpConnection* connection) {
+        if (!connection) {
+            return;
+        }
+        connection->close();
+        sweep_closed();
     }
 
 private:
@@ -144,7 +154,8 @@ private:
             evutil_closesocket(fd);
             return;
         }
-        if (self->connections_.size() >= self->max_connections_) {
+        self->sweep_closed();
+        if (self->connection_count() >= self->max_connections_) {
             evutil_closesocket(fd);
             return;
         }
@@ -157,6 +168,7 @@ private:
         LinuxTcpConnection* raw = connection.get();
         self->connections_.push_back(std::move(connection));
         self->handler_->on_accept(*raw, raw->peer());
+        self->sweep_closed();
     }
 
     static void listener_error_callback(evconnlistener* listener, void* ctx) {
@@ -182,6 +194,20 @@ private:
         }
     }
 
+    void sweep_closed() {
+        for (auto it = connections_.begin(); it != connections_.end();) {
+            LinuxTcpConnection* connection = it->get();
+            if (!connection || connection->remove_requested()) {
+                if (connection) {
+                    connection->detach();
+                }
+                it = connections_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+    }
+
     LinuxLibeventLoop& loop_;
     size_t max_connections_ = 16;
     evconnlistener* listener_ = nullptr;
@@ -200,6 +226,7 @@ inline LinuxTcpConnection::LinuxTcpConnection(LinuxTcpServer* owner,
     bev_ = bufferevent_socket_new(base, fd, BEV_OPT_CLOSE_ON_FREE);
     if (!bev_) {
         evutil_closesocket(fd);
+        remove_requested_ = true;
         return;
     }
     bufferevent_setcb(bev_, &LinuxTcpConnection::read_callback,
@@ -216,22 +243,20 @@ inline LinuxTcpConnection::LinuxTcpConnection(LinuxTcpServer* owner,
 }
 
 inline LinuxTcpConnection::~LinuxTcpConnection() {
+    close_bev();
+}
+
+inline void LinuxTcpConnection::close_bev() {
     if (bev_) {
-        bufferevent_free(bev_);
+        bufferevent* old = bev_;
         bev_ = nullptr;
+        bufferevent_free(old);
     }
 }
 
 inline void LinuxTcpConnection::close() {
-    if (!bev_) {
-        return;
-    }
-    bufferevent* old = bev_;
-    bev_ = nullptr;
-    bufferevent_free(old);
-    if (owner_) {
-        owner_->remove(this);
-    }
+    close_bev();
+    remove_requested_ = true;
 }
 
 inline size_t LinuxTcpConnection::input_size() const {
@@ -291,35 +316,44 @@ inline bool LinuxTcpConnection::read_line(char* dst, size_t max_len, bool strip_
 
 inline void LinuxTcpConnection::read_callback(bufferevent*, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
+    LinuxTcpServer* owner = self ? self->owner_ : nullptr;
     if (self && self->bev_) {
         self->handler_.on_data(*self);
+    }
+    if (owner) {
+        owner->sweep_closed();
     }
 }
 
 inline void LinuxTcpConnection::write_callback(bufferevent*, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
+    LinuxTcpServer* owner = self ? self->owner_ : nullptr;
     if (self && self->bev_) {
         self->handler_.on_write_ready(*self);
+    }
+    if (owner) {
+        owner->sweep_closed();
     }
 }
 
 inline void LinuxTcpConnection::event_callback(bufferevent*, short events, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
+    LinuxTcpServer* owner = self ? self->owner_ : nullptr;
     if (self) {
         self->notify_event(events);
+    }
+    if (owner) {
+        owner->sweep_closed();
     }
 }
 
 inline void LinuxTcpConnection::notify_event(short events) {
     if (events & BEV_EVENT_ERROR) {
         handler_.on_error(*this, EVUTIL_SOCKET_ERROR());
+        close();
     } else if (events & BEV_EVENT_EOF) {
         handler_.on_close(*this);
-    }
-    if (events & (BEV_EVENT_ERROR | BEV_EVENT_EOF)) {
-        if (owner_) {
-            owner_->remove(this);
-        }
+        close();
     }
 }
 

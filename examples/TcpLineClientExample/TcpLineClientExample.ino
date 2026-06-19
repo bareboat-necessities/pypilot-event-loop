@@ -19,6 +19,7 @@
 #include <iostream>
 #endif
 
+#include <string.h>
 #include <pypilot_event_loop.hpp>
 
 using namespace pypilot_event_loop;

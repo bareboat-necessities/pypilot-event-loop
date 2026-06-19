@@ -1,7 +1,7 @@
 #include <cassert>
 #include "pypilot_event_loop.hpp"
-#include "pypilot_event_loop_test/test_clock.hpp"
-#include "pypilot_event_loop_test/test_scheduler.hpp"
+#include "support/test_clock.hpp"
+#include "support/test_scheduler.hpp"
 
 class CountTask final : public pypilot_event_loop::IRuntimeTask {
 public:
@@ -15,7 +15,8 @@ public:
 };
 
 int main() {
-    using namespace pypilot_event_loop;
+    using pypilot_event_loop_test::TestClock;
+    using pypilot_event_loop_test::TestScheduler;
 
     TestClock clock;
     TestScheduler loop(clock);

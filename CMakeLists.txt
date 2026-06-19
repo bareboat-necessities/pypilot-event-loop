@@ -20,7 +20,7 @@ target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES} ${LIBGP
 target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER} ${LIBGPIOD_CFLAGS_OTHER})
 
 function(add_portable_example target source)
-    set_source_files_properties(${source} PROPERTIES LANGUAGE CXX)
+    set_source_files_properties(${source} PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-x c++")
     add_executable(${target} ${source})
     target_link_libraries(${target} PRIVATE pypilot_event_loop)
 endfunction()

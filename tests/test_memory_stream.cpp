@@ -1,8 +1,8 @@
 #include <cassert>
-#include "pypilot_event_loop_test/memory_stream.hpp"
+#include "support/memory_stream.hpp"
 
 int main() {
-    using namespace pypilot_event_loop;
+    using pypilot_event_loop_test::MemoryByteStream;
 
     MemoryByteStream<4> stream;
     assert(stream.valid());

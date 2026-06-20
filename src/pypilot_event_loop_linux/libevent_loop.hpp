@@ -280,6 +280,9 @@ private:
         if (!item->removed && item->periodic && item->ev) {
             timeval tv = timeval_from_us(item->period_us);
             evtimer_add(item->ev, &tv);
+        } else if (!item->periodic) {
+            item->removed = true;
+            item->task = nullptr;
         }
         loop->compact_removed_events();
     }

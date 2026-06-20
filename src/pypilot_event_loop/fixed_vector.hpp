@@ -15,6 +15,25 @@ public:
         return true;
     }
 
+    bool erase(size_t index) {
+        if (index >= size_) {
+            return false;
+        }
+        for (size_t i = index + 1; i < size_; ++i) {
+            items_[i - 1] = items_[i];
+        }
+        --size_;
+        return true;
+    }
+
+    bool pop_back() {
+        if (size_ == 0) {
+            return false;
+        }
+        --size_;
+        return true;
+    }
+
     void clear() { size_ = 0; }
     size_t size() const { return size_; }
     size_t capacity() const { return Capacity; }

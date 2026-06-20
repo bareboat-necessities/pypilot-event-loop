@@ -33,6 +33,7 @@ public:
     const event_base* base() const { return base_; }
 
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
+        compact_removed_events();
         if (!base_ || period_us == 0) {
             return false;
         }
@@ -56,6 +57,7 @@ public:
     }
 
     bool add_one_shot(IRuntimeTask& task, uint64_t due_us) override {
+        compact_removed_events();
         if (!base_) {
             return false;
         }
@@ -82,42 +84,48 @@ public:
 
     bool remove(IRuntimeTask& task) override {
         bool removed = false;
-        removed = remove_timer_events(periodic_events_, task) || removed;
-        removed = remove_timer_events(one_shot_events_, task) || removed;
-        removed = remove_fd_events(fd_events_, task) || removed;
+        removed = mark_timer_events_removed(periodic_events_, task) || removed;
+        removed = mark_timer_events_removed(one_shot_events_, task) || removed;
+        removed = mark_fd_events_removed(fd_events_, task) || removed;
+        compact_removed_events();
         return removed;
     }
 
     bool add_readable_fd(int fd, IRuntimeTask& task) {
+        compact_removed_events();
         return add_fd(fd, EV_READ | EV_PERSIST, task);
     }
 
     bool add_writable_fd(int fd, IRuntimeTask& task) {
+        compact_removed_events();
         return add_fd(fd, EV_WRITE | EV_PERSIST, task);
     }
 
     bool remove_fd(int fd, IRuntimeTask& task) {
-        for (auto it = fd_events_.begin(); it != fd_events_.end(); ++it) {
-            FdEvent* item = it->get();
+        bool removed = false;
+        for (auto& entry : fd_events_) {
+            FdEvent* item = entry.get();
             if (item && item->fd == fd && item->task == &task) {
-                free_event(item->ev);
-                item->ev = nullptr;
-                fd_events_.erase(it);
-                return true;
+                item->removed = true;
+                item->task = nullptr;
+                removed = true;
             }
         }
-        return false;
+        compact_removed_events();
+        return removed;
     }
 
     void run_once() override {
         if (base_) {
             event_base_loop(base_, EVLOOP_NONBLOCK);
+            compact_removed_events();
         }
     }
 
     void run_forever() override {
         if (base_) {
             event_base_dispatch(base_);
+            compact_removed_events();
         }
     }
 
@@ -134,6 +142,7 @@ private:
         event* ev = nullptr;
         uint64_t period_us = 0;
         bool periodic = false;
+        bool removed = false;
     };
 
     struct FdEvent {
@@ -141,6 +150,7 @@ private:
         IRuntimeTask* task = nullptr;
         event* ev = nullptr;
         int fd = -1;
+        bool removed = false;
     };
 
     bool add_fd(int fd, short flags, IRuntimeTask& task) {
@@ -190,36 +200,65 @@ private:
         events.clear();
     }
 
-    static bool remove_timer_events(std::vector<std::unique_ptr<TimerEvent>>& events, IRuntimeTask& task) {
+    static bool mark_timer_events_removed(std::vector<std::unique_ptr<TimerEvent>>& events, IRuntimeTask& task) {
         bool removed = false;
-        for (auto it = events.begin(); it != events.end();) {
-            TimerEvent* item = it->get();
+        for (auto& entry : events) {
+            TimerEvent* item = entry.get();
             if (item && item->task == &task) {
-                free_event(item->ev);
-                item->ev = nullptr;
-                it = events.erase(it);
+                item->removed = true;
+                item->task = nullptr;
                 removed = true;
-            } else {
-                ++it;
             }
         }
         return removed;
     }
 
-    static bool remove_fd_events(std::vector<std::unique_ptr<FdEvent>>& events, IRuntimeTask& task) {
+    static bool mark_fd_events_removed(std::vector<std::unique_ptr<FdEvent>>& events, IRuntimeTask& task) {
         bool removed = false;
-        for (auto it = events.begin(); it != events.end();) {
-            FdEvent* item = it->get();
+        for (auto& entry : events) {
+            FdEvent* item = entry.get();
             if (item && item->task == &task) {
+                item->removed = true;
+                item->task = nullptr;
+                removed = true;
+            }
+        }
+        return removed;
+    }
+
+    void compact_removed_events() {
+        if (callback_depth_ != 0) {
+            return;
+        }
+        compact_removed_timer_events(periodic_events_);
+        compact_removed_timer_events(one_shot_events_);
+        compact_removed_fd_events(fd_events_);
+    }
+
+    static void compact_removed_timer_events(std::vector<std::unique_ptr<TimerEvent>>& events) {
+        for (auto it = events.begin(); it != events.end();) {
+            TimerEvent* item = it->get();
+            if (item && item->removed) {
                 free_event(item->ev);
                 item->ev = nullptr;
                 it = events.erase(it);
-                removed = true;
             } else {
                 ++it;
             }
         }
-        return removed;
+    }
+
+    static void compact_removed_fd_events(std::vector<std::unique_ptr<FdEvent>>& events) {
+        for (auto it = events.begin(); it != events.end();) {
+            FdEvent* item = it->get();
+            if (item && item->removed) {
+                free_event(item->ev);
+                item->ev = nullptr;
+                it = events.erase(it);
+            } else {
+                ++it;
+            }
+        }
     }
 
     static timeval timeval_from_us(uint64_t us) {
@@ -231,22 +270,30 @@ private:
 
     static void timer_callback(evutil_socket_t, short, void* arg) {
         auto* item = static_cast<TimerEvent*>(arg);
-        if (!item || !item->loop || !item->task) {
+        if (!item || !item->loop || item->removed || !item->task) {
             return;
         }
-        item->task->poll(item->loop->clock_.micros());
-        if (item->periodic && item->ev) {
+        LinuxLibeventLoop* loop = item->loop;
+        ++loop->callback_depth_;
+        item->task->poll(loop->clock_.micros());
+        --loop->callback_depth_;
+        if (!item->removed && item->periodic && item->ev) {
             timeval tv = timeval_from_us(item->period_us);
             evtimer_add(item->ev, &tv);
         }
+        loop->compact_removed_events();
     }
 
     static void fd_callback(evutil_socket_t, short, void* arg) {
         auto* item = static_cast<FdEvent*>(arg);
-        if (!item || !item->loop || !item->task) {
+        if (!item || !item->loop || item->removed || !item->task) {
             return;
         }
-        item->task->poll(item->loop->clock_.micros());
+        LinuxLibeventLoop* loop = item->loop;
+        ++loop->callback_depth_;
+        item->task->poll(loop->clock_.micros());
+        --loop->callback_depth_;
+        loop->compact_removed_events();
     }
 
     IClock& clock_;
@@ -254,6 +301,7 @@ private:
     std::vector<std::unique_ptr<TimerEvent> > periodic_events_;
     std::vector<std::unique_ptr<TimerEvent> > one_shot_events_;
     std::vector<std::unique_ptr<FdEvent> > fd_events_;
+    unsigned callback_depth_ = 0;
 };
 
 } // namespace pypilot_event_loop

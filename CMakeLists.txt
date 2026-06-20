@@ -7,17 +7,23 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBEVENT REQUIRED libevent)
-pkg_check_modules(LIBGPIOD REQUIRED libgpiod)
+pkg_check_modules(LIBGPIOD libgpiod)
 
 add_library(pypilot_event_loop INTERFACE)
 target_include_directories(pypilot_event_loop INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${LIBEVENT_INCLUDE_DIRS}
-    ${LIBGPIOD_INCLUDE_DIRS}
 )
-target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS} ${LIBGPIOD_LIBRARY_DIRS})
-target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES} ${LIBGPIOD_LIBRARIES})
-target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER} ${LIBGPIOD_CFLAGS_OTHER})
+target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS})
+target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES})
+target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER})
+
+if(LIBGPIOD_FOUND)
+    target_include_directories(pypilot_event_loop INTERFACE ${LIBGPIOD_INCLUDE_DIRS})
+    target_link_directories(pypilot_event_loop INTERFACE ${LIBGPIOD_LIBRARY_DIRS})
+    target_link_libraries(pypilot_event_loop INTERFACE ${LIBGPIOD_LIBRARIES})
+    target_compile_options(pypilot_event_loop INTERFACE ${LIBGPIOD_CFLAGS_OTHER})
+endif()
 
 function(add_portable_example target source)
     set_source_files_properties(${source} PROPERTIES LANGUAGE CXX COMPILE_FLAGS "-x c++")

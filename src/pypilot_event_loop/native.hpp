@@ -18,4 +18,6 @@ using NativeClock = LinuxMonotonicClock;
 using NativeScheduler = LinuxLibeventLoop;
 } // namespace pypilot_event_loop
 
+#else
+#error "Unsupported pypilot-event-loop platform: define ARDUINO or build on Linux"
 #endif

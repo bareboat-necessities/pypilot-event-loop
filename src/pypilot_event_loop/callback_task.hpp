@@ -28,7 +28,7 @@ public:
     template<typename Callable>
     bool set(Callable callable) {
         static_assert(sizeof(Callable) <= StorageSize, "callback object is too large for CallbackTask storage");
-        static_assert(alignof(Callable) <= alignof(max_align_t), "callback object alignment is too large for CallbackTask storage");
+        static_assert(alignof(Callable) <= alignof(StorageAlignment), "callback object alignment is too large for CallbackTask storage");
         clear();
         if (invoking_) {
             return false;
@@ -78,6 +78,13 @@ public:
     }
 
 private:
+    union StorageAlignment {
+        void* pointer;
+        long long integer;
+        double floating;
+        long double long_floating;
+    };
+
     void destroy_now() {
         if ((active_ || clear_requested_) && destroy_) {
             destroy_(storage_);
@@ -89,7 +96,7 @@ private:
         destroy_ = nullptr;
     }
 
-    alignas(max_align_t) unsigned char storage_[StorageSize]{};
+    alignas(StorageAlignment) unsigned char storage_[StorageSize]{};
     void (*invoke_)(void*, uint64_t) = nullptr;
     void (*destroy_)(void*) = nullptr;
     bool active_ = false;

@@ -79,6 +79,7 @@ public:
     template<typename Callable>
     bool set(Callable callable) {
         static_assert(sizeof(Callable) <= StorageSize, "protocol callback is too large for storage");
+        static_assert(alignof(Callable) <= alignof(max_align_t), "protocol callback alignment is too large for storage");
         clear();
         new (storage_) Callable(callable);
         invoke_ = [](void* storage, const ViewType& view) {
@@ -109,7 +110,7 @@ public:
     }
 
 private:
-    alignas(void*) unsigned char storage_[StorageSize]{};
+    alignas(max_align_t) unsigned char storage_[StorageSize]{};
     void (*invoke_)(void*, const ViewType&) = nullptr;
     void (*destroy_)(void*) = nullptr;
     bool active_ = false;

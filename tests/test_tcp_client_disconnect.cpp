@@ -49,10 +49,15 @@ int main() {
 
     pypilot_event_loop::NativeTcpClient client(event_loop.scheduler());
     pypilot_event_loop::TcpConnectOptions connect_options;
-    connect_options.host = "127.0.0.1";
+    connect_options.host = "localhost";
     connect_options.port = server.port();
     assert(client.connect(connect_options, client_handler));
+
+    for (int i = 0; i < 200 && client_handler.connected == 0 && client_handler.errors == 0; ++i) {
+        event_loop.run_once();
+    }
     assert(client_handler.connected == 1);
+    assert(client_handler.errors == 0);
 
     for (int i = 0; i < 200 && client_handler.closed == 0 && client_handler.errors == 0; ++i) {
         event_loop.run_once();
@@ -61,7 +66,7 @@ int main() {
     assert(server_handler.accepted == 1);
     assert(client_handler.closed == 1);
     assert(client_handler.errors == 0);
-    assert(!client.valid());
+    assert(!client.connected());
     assert(server.connection_count() == 0);
     return 0;
 }

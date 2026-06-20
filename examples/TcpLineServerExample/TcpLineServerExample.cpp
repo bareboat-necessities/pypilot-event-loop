@@ -8,6 +8,9 @@
 #ifndef PYPILOT_WIFI_PASSWORD
 #define PYPILOT_WIFI_PASSWORD "password"
 #endif
+#ifndef PYPILOT_WIFI_CONNECT_TIMEOUT_MS
+#define PYPILOT_WIFI_CONNECT_TIMEOUT_MS 15000UL
+#endif
 #else
 #include <iostream>
 #endif
@@ -19,6 +22,10 @@ using namespace pypilot_event_loop;
 
 static EventLoop<> event_loop;
 static NativeTcpServer server(event_loop.scheduler());
+
+#if defined(ARDUINO)
+static bool setup_failed = false;
+#endif
 
 static void print_text(const char* text) {
 #if defined(ARDUINO)
@@ -86,18 +93,34 @@ struct LineServerHandler final : public ITcpServerHandler {
 static LineServerHandler handler;
 
 #if defined(ARDUINO)
-static void connect_wifi() {
+static bool wifi_credentials_configured() {
+    return strcmp(PYPILOT_WIFI_SSID, "ssid") != 0 && PYPILOT_WIFI_SSID[0] != '\0';
+}
+
+static bool connect_wifi() {
+    if (!wifi_credentials_configured()) {
+        print_text("wifi credentials are placeholders\n");
+        return false;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.begin(PYPILOT_WIFI_SSID, PYPILOT_WIFI_PASSWORD);
+    const unsigned long start_ms = millis();
     while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - start_ms >= PYPILOT_WIFI_CONNECT_TIMEOUT_MS) {
+            print_text("wifi connect timeout\n");
+            return false;
+        }
         delay(250);
     }
+    return true;
 }
 #endif
 
 static bool setup_example() {
 #if defined(ARDUINO)
-    connect_wifi();
+    if (!connect_wifi()) {
+        return false;
+    }
 #endif
 
     TcpListenOptions options;
@@ -119,10 +142,18 @@ static bool setup_example() {
 #if defined(ARDUINO)
 void setup() {
     Serial.begin(115200);
-    setup_example();
+    if (!setup_example()) {
+        print_text("tcp server setup failed\n");
+        setup_failed = true;
+    }
 }
 
 void loop() {
+    if (setup_failed) {
+        print_text("tcp server setup failed\n");
+        delay(1000);
+        return;
+    }
     event_loop.tick();
 }
 #else

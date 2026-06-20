@@ -24,7 +24,7 @@ jobs:
       - name: Test
         run: ctest --test-dir build --output-on-failure
 
-  arduino:
+  arduino-esp32:
     runs-on: ubuntu-latest
     env:
       ARDUINO_BOARD_FQBN: esp32:esp32:esp32s3
@@ -77,6 +77,41 @@ jobs:
 
       - name: Compile integrated event loop example
         run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/IntegratedEventLoopExample
+
+      - name: Compile Linux FIFO IPC example stub
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/LinuxFifoIpcExample
+
+  arduino-avr:
+    runs-on: ubuntu-latest
+    env:
+      ARDUINO_BOARD_FQBN: arduino:avr:mega
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: arduino/setup-arduino-cli@v2
+
+      - name: Install AVR core
+        run: |
+          arduino-cli core update-index
+          arduino-cli core install arduino:avr
+
+      - name: Compile portable timer example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/EventLoopTimerExample
+
+      - name: Compile portable line protocol example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/LineProtocolExample
+
+      - name: Compile portable fixed header protocol example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/FixedHeaderProtocolExample
+
+      - name: Compile portable serial line protocol example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/SerialLineProtocolExample
+
+      - name: Compile portable pin event example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/PinEventExample
+
+      - name: Compile pin IO example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/PinIoExample
 
       - name: Compile Linux FIFO IPC example stub
         run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/LinuxFifoIpcExample

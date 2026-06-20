@@ -33,7 +33,7 @@ public:
         if (invoking_) {
             return false;
         }
-        new (storage_) Callable(callable);
+        new (storage_) Callable(static_cast<Callable&&>(callable));
         invoke_ = [](void* storage, uint64_t) {
             (*static_cast<Callable*>(storage))();
         };

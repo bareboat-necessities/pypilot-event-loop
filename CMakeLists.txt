@@ -25,6 +25,8 @@ if(LIBGPIOD2_FOUND)
     target_compile_options(pypilot_event_loop INTERFACE ${LIBGPIOD2_CFLAGS_OTHER})
 endif()
 
+enable_testing()
+
 function(add_linux_example target source)
     add_executable(${target} ${source})
     target_link_libraries(${target} PRIVATE pypilot_event_loop)
@@ -80,5 +82,3 @@ target_link_libraries(tcp_disconnect_server_example PRIVATE pypilot_event_loop)
 
 add_executable(linux_fifo_ipc_example examples/LinuxFifoIpcExample/LinuxFifoIpcExample.cpp)
 target_link_libraries(linux_fifo_ipc_example PRIVATE pypilot_event_loop)
-
-enable_testing()

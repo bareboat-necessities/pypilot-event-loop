@@ -9,6 +9,9 @@
 #ifndef PYPILOT_WIFI_PASSWORD
 #define PYPILOT_WIFI_PASSWORD "password"
 #endif
+#ifndef PYPILOT_WIFI_CONNECT_TIMEOUT_MS
+#define PYPILOT_WIFI_CONNECT_TIMEOUT_MS 15000UL
+#endif
 #ifndef PYPILOT_TCP_CLIENT_HOST
 #define PYPILOT_TCP_CLIENT_HOST "192.168.1.10"
 #endif
@@ -263,12 +266,26 @@ ServerHandler server_handler;
 ClientHandler client_handler;
 
 #if defined(ARDUINO)
-static void connect_wifi() {
+static bool wifi_credentials_configured() {
+    return strcmp(PYPILOT_WIFI_SSID, "ssid") != 0 && PYPILOT_WIFI_SSID[0] != '\0';
+}
+
+static bool connect_wifi() {
+    if (!wifi_credentials_configured()) {
+        serial_write_text("wifi credentials are placeholders\n");
+        return false;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.begin(PYPILOT_WIFI_SSID, PYPILOT_WIFI_PASSWORD);
+    const unsigned long start_ms = millis();
     while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - start_ms >= PYPILOT_WIFI_CONNECT_TIMEOUT_MS) {
+            serial_write_text("wifi connect timeout\n");
+            return false;
+        }
         delay(250);
     }
+    return true;
 }
 #endif
 
@@ -286,6 +303,7 @@ static bool setup_network(const char* client_host, uint16_t client_port, uint16_
     connect_options.port = client_port;
     if (!tcp_client.connect(connect_options, client_handler)) {
         serial_write_text("tcp client connect start failed\n");
+        return false;
     }
 
     if (!udp.bind(0)) {
@@ -371,7 +389,11 @@ void setup() {
 #else
     PYPILOT_SERIAL_OUT.begin(115200);
 #endif
-    connect_wifi();
+    if (!connect_wifi()) {
+        serial_write_text("integrated event loop wifi setup failed\n");
+        setup_failed = true;
+        return;
+    }
     if (!setup_pins()) {
         serial_write_text("integrated event loop pin setup failed\n");
         setup_failed = true;

@@ -46,6 +46,9 @@ target_link_libraries(test_callback_task PRIVATE pypilot_event_loop)
 add_executable(test_bytes_ready_callback tests/test_bytes_ready_callback.cpp)
 target_link_libraries(test_bytes_ready_callback PRIVATE pypilot_event_loop)
 
+add_executable(test_event_loop_remove_reuses_slot tests/test_event_loop_remove_reuses_slot.cpp)
+target_link_libraries(test_event_loop_remove_reuses_slot PRIVATE pypilot_event_loop)
+
 add_executable(test_protocol_readers tests/test_protocol_readers.cpp)
 target_link_libraries(test_protocol_readers PRIVATE pypilot_event_loop)
 
@@ -105,6 +108,7 @@ add_test(NAME test_test_scheduler COMMAND test_test_scheduler)
 add_test(NAME test_memory_stream COMMAND test_memory_stream)
 add_test(NAME test_callback_task COMMAND test_callback_task)
 add_test(NAME test_bytes_ready_callback COMMAND test_bytes_ready_callback)
+add_test(NAME test_event_loop_remove_reuses_slot COMMAND test_event_loop_remove_reuses_slot)
 add_test(NAME test_protocol_readers COMMAND test_protocol_readers)
 add_test(NAME test_linux_fifo_stream COMMAND test_linux_fifo_stream)
 add_test(NAME test_linux_libevent_loop COMMAND test_linux_libevent_loop)

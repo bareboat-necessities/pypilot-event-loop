@@ -19,24 +19,9 @@ public:
         : clock_(clock), base_(event_base_new()) {}
 
     ~LinuxLibeventLoop() override {
-        for (auto& e : periodic_events_) {
-            if (e->ev) {
-                event_free(e->ev);
-                e->ev = nullptr;
-            }
-        }
-        for (auto& e : one_shot_events_) {
-            if (e->ev) {
-                event_free(e->ev);
-                e->ev = nullptr;
-            }
-        }
-        for (auto& e : fd_events_) {
-            if (e->ev) {
-                event_free(e->ev);
-                e->ev = nullptr;
-            }
-        }
+        free_timer_events(periodic_events_);
+        free_timer_events(one_shot_events_);
+        free_fd_events(fd_events_);
         if (base_) {
             event_base_free(base_);
             base_ = nullptr;
@@ -95,6 +80,14 @@ public:
         return true;
     }
 
+    bool remove(IRuntimeTask& task) override {
+        bool removed = false;
+        removed = remove_timer_events(periodic_events_, task) || removed;
+        removed = remove_timer_events(one_shot_events_, task) || removed;
+        removed = remove_fd_events(fd_events_, task) || removed;
+        return removed;
+    }
+
     bool add_readable_fd(int fd, IRuntimeTask& task) {
         return add_fd(fd, EV_READ | EV_PERSIST, task);
     }
@@ -107,10 +100,8 @@ public:
         for (auto it = fd_events_.begin(); it != fd_events_.end(); ++it) {
             FdEvent* item = it->get();
             if (item && item->fd == fd && item->task == &task) {
-                if (item->ev) {
-                    event_free(item->ev);
-                    item->ev = nullptr;
-                }
+                free_event(item->ev);
+                item->ev = nullptr;
                 fd_events_.erase(it);
                 return true;
             }
@@ -171,6 +162,64 @@ private:
         }
         fd_events_.push_back(std::move(item));
         return true;
+    }
+
+    static void free_event(event* ev) {
+        if (ev) {
+            event_free(ev);
+        }
+    }
+
+    static void free_timer_events(std::vector<std::unique_ptr<TimerEvent>>& events) {
+        for (auto& e : events) {
+            if (e && e->ev) {
+                event_free(e->ev);
+                e->ev = nullptr;
+            }
+        }
+        events.clear();
+    }
+
+    static void free_fd_events(std::vector<std::unique_ptr<FdEvent>>& events) {
+        for (auto& e : events) {
+            if (e && e->ev) {
+                event_free(e->ev);
+                e->ev = nullptr;
+            }
+        }
+        events.clear();
+    }
+
+    static bool remove_timer_events(std::vector<std::unique_ptr<TimerEvent>>& events, IRuntimeTask& task) {
+        bool removed = false;
+        for (auto it = events.begin(); it != events.end();) {
+            TimerEvent* item = it->get();
+            if (item && item->task == &task) {
+                free_event(item->ev);
+                item->ev = nullptr;
+                it = events.erase(it);
+                removed = true;
+            } else {
+                ++it;
+            }
+        }
+        return removed;
+    }
+
+    static bool remove_fd_events(std::vector<std::unique_ptr<FdEvent>>& events, IRuntimeTask& task) {
+        bool removed = false;
+        for (auto it = events.begin(); it != events.end();) {
+            FdEvent* item = it->get();
+            if (item && item->task == &task) {
+                free_event(item->ev);
+                item->ev = nullptr;
+                it = events.erase(it);
+                removed = true;
+            } else {
+                ++it;
+            }
+        }
+        return removed;
     }
 
     static timeval timeval_from_us(uint64_t us) {

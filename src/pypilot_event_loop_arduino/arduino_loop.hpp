@@ -1,7 +1,6 @@
 #pragma once
 
 #include <stddef.h>
-#include "pypilot_event_loop/fixed_vector.hpp"
 #include "pypilot_event_loop/scheduler.hpp"
 #include "pypilot_event_loop/clock.hpp"
 
@@ -15,7 +14,7 @@ public:
 
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
         compact_inactive();
-        if (period_us == 0) {
+        if (period_us == 0 || task_count_ >= MaxTasks) {
             return false;
         }
         TaskSlot slot;
@@ -24,23 +23,28 @@ public:
         slot.next_due_us = clock_.micros();
         slot.periodic = true;
         slot.active = true;
-        return tasks_.push_back(slot);
+        tasks_[task_count_++] = slot;
+        return true;
     }
 
     bool add_one_shot(IRuntimeTask& task, uint64_t due_us) override {
         compact_inactive();
+        if (task_count_ >= MaxTasks) {
+            return false;
+        }
         TaskSlot slot;
         slot.task = &task;
         slot.period_us = 0;
         slot.next_due_us = due_us;
         slot.periodic = false;
         slot.active = true;
-        return tasks_.push_back(slot);
+        tasks_[task_count_++] = slot;
+        return true;
     }
 
     bool remove(IRuntimeTask& task) override {
         bool removed = false;
-        for (size_t i = 0; i < tasks_.size(); ++i) {
+        for (size_t i = 0; i < task_count_; ++i) {
             TaskSlot& slot = tasks_[i];
             if (slot.task == &task) {
                 slot.task = nullptr;
@@ -58,7 +62,7 @@ public:
         compact_inactive();
         running_ = true;
         const uint64_t now_us = clock_.micros();
-        for (size_t i = 0; i < tasks_.size(); ++i) {
+        for (size_t i = 0; i < task_count_; ++i) {
             TaskSlot& slot = tasks_[i];
             if (!slot.active || !slot.task || now_us < slot.next_due_us) {
                 continue;
@@ -99,15 +103,28 @@ private:
         bool active = false;
     };
 
+    static constexpr size_t MaxTasks = 32;
+
     void compact_inactive() {
-        for (size_t i = 0; i < tasks_.size();) {
+        for (size_t i = 0; i < task_count_;) {
             const TaskSlot& slot = tasks_[i];
             if (!slot.active || !slot.task) {
-                tasks_.erase(i);
+                erase_task(i);
             } else {
                 ++i;
             }
         }
+    }
+
+    void erase_task(size_t index) {
+        if (index >= task_count_) {
+            return;
+        }
+        for (size_t i = index + 1; i < task_count_; ++i) {
+            tasks_[i - 1] = tasks_[i];
+        }
+        --task_count_;
+        tasks_[task_count_] = TaskSlot{};
     }
 
     static void yield_if_available() {
@@ -117,7 +134,8 @@ private:
     }
 
     IClock& clock_;
-    FixedVector<TaskSlot, 32> tasks_;
+    TaskSlot tasks_[MaxTasks]{};
+    size_t task_count_ = 0;
     bool exit_requested_ = false;
     bool running_ = false;
 };

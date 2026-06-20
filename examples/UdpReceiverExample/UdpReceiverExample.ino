@@ -8,6 +8,9 @@
 #ifndef PYPILOT_WIFI_PASSWORD
 #define PYPILOT_WIFI_PASSWORD "password"
 #endif
+#ifndef PYPILOT_WIFI_CONNECT_TIMEOUT_MS
+#define PYPILOT_WIFI_CONNECT_TIMEOUT_MS 15000UL
+#endif
 #ifndef PYPILOT_UDP_PORT
 #define PYPILOT_UDP_PORT 20225
 #endif
@@ -16,12 +19,17 @@
 #include <iostream>
 #endif
 
+#include <string.h>
 #include <pypilot_event_loop.hpp>
 
 using namespace pypilot_event_loop;
 
 EventLoop<> event_loop;
 NativeUdpDatagramStream udp;
+
+#if defined(ARDUINO)
+bool setup_failed = false;
+#endif
 
 static void print_text(const char* text) {
 #if defined(ARDUINO)
@@ -40,18 +48,34 @@ static void print_number(uint16_t value) {
 }
 
 #if defined(ARDUINO)
-static void connect_wifi() {
+static bool wifi_credentials_configured() {
+    return strcmp(PYPILOT_WIFI_SSID, "ssid") != 0 && PYPILOT_WIFI_SSID[0] != '\0';
+}
+
+static bool connect_wifi() {
+    if (!wifi_credentials_configured()) {
+        print_text("wifi credentials are placeholders\n");
+        return false;
+    }
     WiFi.mode(WIFI_STA);
     WiFi.begin(PYPILOT_WIFI_SSID, PYPILOT_WIFI_PASSWORD);
+    const unsigned long start_ms = millis();
     while (WiFi.status() != WL_CONNECTED) {
+        if (millis() - start_ms >= PYPILOT_WIFI_CONNECT_TIMEOUT_MS) {
+            print_text("wifi connect timeout\n");
+            return false;
+        }
         delay(250);
     }
+    return true;
 }
 #endif
 
 static bool setup_example(uint16_t port) {
 #if defined(ARDUINO)
-    connect_wifi();
+    if (!connect_wifi()) {
+        return false;
+    }
 #endif
     if (!udp.bind(port)) {
         return false;
@@ -81,10 +105,16 @@ void setup() {
     Serial.begin(115200);
     if (!setup_example(PYPILOT_UDP_PORT)) {
         print_text("udp receiver setup failed\n");
+        setup_failed = true;
     }
 }
 
 void loop() {
+    if (setup_failed) {
+        print_text("udp receiver setup failed\n");
+        delay(1000);
+        return;
+    }
     event_loop.tick();
 }
 #else

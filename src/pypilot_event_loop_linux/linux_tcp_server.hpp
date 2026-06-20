@@ -77,7 +77,6 @@ public:
 
     bool listen(const TcpListenOptions& options, ITcpServerHandler& handler) {
         close();
-        handler_ = &handler;
 
         sockaddr_in sin{};
         sin.sin_family = AF_INET;
@@ -105,9 +104,9 @@ public:
             reinterpret_cast<sockaddr*>(&sin),
             sizeof(sin));
         if (!listener_) {
-            handler_ = nullptr;
             return false;
         }
+        handler_ = &handler;
         evconnlistener_set_error_cb(listener_, &LinuxTcpServer::listener_error_callback);
         update_bound_port();
         return true;

@@ -118,19 +118,17 @@ public:
     /**
      * Register a lambda/callable that runs once after delay_us microseconds.
      *
-     * The callback slot is automatically reclaimed after the callable returns.
-     * If the callable explicitly removes the handle while running, the
-     * post-callback reclamation detects the generation change and does nothing.
+     * The stored callable is wrapped with a small one-shot completion object.
+     * This avoids a nested lambda capture and gives a clearer compile-time
+     * storage-size failure when CallbackStorageSize is too small.
      */
     template<typename Callable>
     EventHandle on_delay_us(uint64_t delay_us, Callable callable) {
         for (size_t i = 0; i < MaxCallbacks; ++i) {
             if (!callback_used_[i]) {
                 const EventHandle handle{static_cast<uint16_t>(i), callback_generations_[i]};
-                const bool set_ok = callback_tasks_[i].set([this, handle, callable]() mutable {
-                    callable();
-                    complete_one_shot(handle);
-                });
+                const bool set_ok = callback_tasks_[i].set(
+                    OneShotCallback<Callable>(this, handle, static_cast<Callable&&>(callable)));
                 if (!set_ok) {
                     return EventHandle{};
                 }
@@ -250,10 +248,25 @@ public:
 
 private:
     template<typename Callable>
+    struct OneShotCallback {
+        OneShotCallback(EventLoop* loop_value, EventHandle handle_value, Callable callable_value)
+            : loop(loop_value), handle(handle_value), callable(static_cast<Callable&&>(callable_value)) {}
+
+        void operator()() {
+            callable();
+            loop->complete_one_shot(handle);
+        }
+
+        EventLoop* loop = nullptr;
+        EventHandle handle;
+        Callable callable;
+    };
+
+    template<typename Callable>
     EventHandle allocate_callback(Callable callable) {
         for (size_t i = 0; i < MaxCallbacks; ++i) {
             if (!callback_used_[i]) {
-                if (!callback_tasks_[i].set(callable)) {
+                if (!callback_tasks_[i].set(static_cast<Callable&&>(callable))) {
                     return EventHandle{};
                 }
                 callback_used_[i] = true;

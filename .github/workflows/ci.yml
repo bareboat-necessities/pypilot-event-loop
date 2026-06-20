@@ -63,6 +63,12 @@ jobs:
       - name: Compile TCP line server example
         run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/TcpLineServerExample
 
+      - name: Compile TCP fixed-header server example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/TcpFixedHeaderServerExample
+
+      - name: Compile TCP disconnect server example
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/TcpDisconnectServerExample
+
       - name: Compile UDP broadcast sender example
         run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/UdpBroadcastSenderExample
 
@@ -71,3 +77,6 @@ jobs:
 
       - name: Compile integrated event loop example
         run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/IntegratedEventLoopExample
+
+      - name: Compile Linux FIFO IPC example stub
+        run: arduino-cli compile --fqbn "$ARDUINO_BOARD_FQBN" --libraries . examples/LinuxFifoIpcExample

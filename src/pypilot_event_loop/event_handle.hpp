@@ -8,9 +8,8 @@ namespace pypilot_event_loop {
  * Stable handle for an event-loop callback slot.
  *
  * The slot identifies storage inside EventLoop. The generation prevents stale
- * handles from controlling a later callback if slot reuse is introduced. Current
- * scheduler backends do not support true unscheduling yet, so remove() disables
- * and clears the callback but does not reclaim the slot for reuse.
+ * handles from controlling a later callback after the slot has been removed and
+ * reused.
  */
 struct EventHandle {
     static constexpr uint16_t invalid_slot = 0xffffu;

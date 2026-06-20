@@ -135,10 +135,16 @@ class ArduinoWiFiTcpServer final : public IRuntimeTask {
 public:
     explicit ArduinoWiFiTcpServer(ArduinoLoop& loop, size_t max_connections = 4)
         : loop_(loop), max_connections_(max_connections > max_slots ? max_slots : max_connections) {
-        loop_.add_periodic(*this, 1000);
+        registered_ = loop_.add_periodic(*this, 1000);
     }
 
-    ~ArduinoWiFiTcpServer() override { close(); }
+    ~ArduinoWiFiTcpServer() override {
+        if (registered_) {
+            loop_.remove(*this);
+            registered_ = false;
+        }
+        close();
+    }
 
     bool listen(const TcpListenOptions& options, ITcpServerHandler& handler) {
         close();
@@ -232,16 +238,23 @@ private:
     ITcpServerHandler* handler_ = nullptr;
     uint16_t bound_port_ = 0;
     bool active_ = false;
+    bool registered_ = false;
     ArduinoWiFiTcpConnection connections_[max_slots];
 };
 
 class ArduinoWiFiTcpClient final : public IRuntimeTask {
 public:
     explicit ArduinoWiFiTcpClient(ArduinoLoop& loop) : loop_(loop) {
-        loop_.add_periodic(*this, 1000);
+        registered_ = loop_.add_periodic(*this, 1000);
     }
 
-    ~ArduinoWiFiTcpClient() override { close(); }
+    ~ArduinoWiFiTcpClient() override {
+        if (registered_) {
+            loop_.remove(*this);
+            registered_ = false;
+        }
+        close();
+    }
 
     bool connect(const TcpConnectOptions& options, ITcpClientHandler& handler) {
         close();
@@ -285,6 +298,7 @@ public:
 private:
     ArduinoLoop& loop_;
     ITcpClientHandler* handler_ = nullptr;
+    bool registered_ = false;
     ArduinoWiFiTcpConnection connection_;
 };
 

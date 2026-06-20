@@ -79,6 +79,7 @@ add_unit_test(test_tcp_close_closes_clients tests/test_tcp_close_closes_clients.
 
 if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
     add_unit_test(test_linux_gpiod_pin_io_compile tests/test_linux_gpiod_pin_io_compile.cpp)
+    add_unit_test(test_linux_gpiod_pin_event_compile tests/test_linux_gpiod_pin_event_compile.cpp)
 endif()
 
 add_linux_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.cpp)

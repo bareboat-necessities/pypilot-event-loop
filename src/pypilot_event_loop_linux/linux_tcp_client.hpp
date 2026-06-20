@@ -94,18 +94,10 @@ public:
     }
 
     bool read_exact(uint8_t* dst, size_t len) override {
-        if (!dst) {
+        if (!dst || input_size() < len) {
             return false;
         }
-        size_t done = 0;
-        while (done < len) {
-            const int n = read(dst + done, len - done);
-            if (n <= 0) {
-                return false;
-            }
-            done += static_cast<size_t>(n);
-        }
-        return true;
+        return read(dst, len) == static_cast<int>(len);
     }
 
     bool read_line(char* dst, size_t max_len, bool strip_cr = true) override {

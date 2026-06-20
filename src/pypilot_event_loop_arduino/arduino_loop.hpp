@@ -14,6 +14,7 @@ public:
     bool valid() const override { return true; }
 
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) override {
+        compact_inactive();
         if (period_us == 0) {
             return false;
         }
@@ -27,6 +28,7 @@ public:
     }
 
     bool add_one_shot(IRuntimeTask& task, uint64_t due_us) override {
+        compact_inactive();
         TaskSlot slot;
         slot.task = &task;
         slot.period_us = 0;
@@ -36,7 +38,25 @@ public:
         return tasks_.push_back(slot);
     }
 
+    bool remove(IRuntimeTask& task) override {
+        bool removed = false;
+        for (size_t i = 0; i < tasks_.size(); ++i) {
+            TaskSlot& slot = tasks_[i];
+            if (slot.task == &task) {
+                slot.task = nullptr;
+                slot.active = false;
+                removed = true;
+            }
+        }
+        if (!running_) {
+            compact_inactive();
+        }
+        return removed;
+    }
+
     void run_once() override {
+        compact_inactive();
+        running_ = true;
         const uint64_t now_us = clock_.micros();
         for (size_t i = 0; i < tasks_.size(); ++i) {
             TaskSlot& slot = tasks_[i];
@@ -44,14 +64,20 @@ public:
                 continue;
             }
             slot.task->poll(now_us);
+            if (!slot.active || !slot.task) {
+                continue;
+            }
             if (slot.periodic) {
                 do {
                     slot.next_due_us += slot.period_us;
                 } while (now_us >= slot.next_due_us);
             } else {
                 slot.active = false;
+                slot.task = nullptr;
             }
         }
+        running_ = false;
+        compact_inactive();
     }
 
     void run_forever() override {
@@ -73,6 +99,17 @@ private:
         bool active = false;
     };
 
+    void compact_inactive() {
+        for (size_t i = 0; i < tasks_.size();) {
+            const TaskSlot& slot = tasks_[i];
+            if (!slot.active || !slot.task) {
+                tasks_.erase(i);
+            } else {
+                ++i;
+            }
+        }
+    }
+
     static void yield_if_available() {
 #if defined(ARDUINO)
         yield();
@@ -82,6 +119,7 @@ private:
     IClock& clock_;
     FixedVector<TaskSlot, 32> tasks_;
     bool exit_requested_ = false;
+    bool running_ = false;
 };
 
 } // namespace pypilot_event_loop

@@ -64,18 +64,16 @@ public:
         return true;
     }
 
-    /**
-     * Remove a callback slot.
-     *
-     * The current scheduler interfaces do not support unscheduling yet, so the
-     * backend may still poll the slot object. The slot is cleared and generation
-     * is incremented, making the old handle invalid and the callback harmless.
-     */
+    /** Remove a callback slot, unschedule its backend task, and make the slot reusable. */
     bool remove(EventHandle handle) {
         if (!valid(handle)) {
             return false;
         }
+        if (!scheduler_.remove(callback_tasks_[handle.slot])) {
+            return false;
+        }
         callback_tasks_[handle.slot].clear();
+        callback_used_[handle.slot] = false;
         ++callback_generations_[handle.slot];
         return true;
     }

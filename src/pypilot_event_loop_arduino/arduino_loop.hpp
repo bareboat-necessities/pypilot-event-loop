@@ -1,6 +1,9 @@
 #pragma once
 
 #include <stddef.h>
+#if defined(ARDUINO)
+#include <Arduino.h>
+#endif
 #include "pypilot_event_loop/scheduler.hpp"
 #include "pypilot_event_loop/clock.hpp"
 

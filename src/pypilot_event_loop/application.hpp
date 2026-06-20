@@ -72,9 +72,7 @@ public:
         if (!scheduler_.remove(callback_tasks_[handle.slot])) {
             return false;
         }
-        callback_tasks_[handle.slot].clear();
-        callback_used_[handle.slot] = false;
-        ++callback_generations_[handle.slot];
+        release_registered(handle);
         return true;
     }
 
@@ -102,18 +100,34 @@ public:
         return handle;
     }
 
-    /** Register a lambda/callable that runs once after delay_us microseconds. */
+    /**
+     * Register a lambda/callable that runs once after delay_us microseconds.
+     *
+     * The callback slot is automatically reclaimed after the callable returns.
+     * If the callable explicitly removes the handle while running, the
+     * post-callback reclamation detects the generation change and does nothing.
+     */
     template<typename Callable>
     EventHandle on_delay_us(uint64_t delay_us, Callable callable) {
-        const EventHandle handle = allocate_callback(callable);
-        if (!handle.assigned()) {
-            return EventHandle{};
+        for (size_t i = 0; i < MaxCallbacks; ++i) {
+            if (!callback_used_[i]) {
+                const EventHandle handle{static_cast<uint16_t>(i), callback_generations_[i]};
+                const bool set_ok = callback_tasks_[i].set([this, handle, callable]() mutable {
+                    callable();
+                    complete_one_shot(handle);
+                });
+                if (!set_ok) {
+                    return EventHandle{};
+                }
+                callback_used_[i] = true;
+                if (!scheduler_.add_one_shot(callback_tasks_[i], clock_.micros() + delay_us)) {
+                    release_unregistered(handle);
+                    return EventHandle{};
+                }
+                return handle;
+            }
         }
-        if (!scheduler_.add_one_shot(callback_tasks_[handle.slot], clock_.micros() + delay_us)) {
-            release_unregistered(handle);
-            return EventHandle{};
-        }
-        return handle;
+        return EventHandle{};
     }
 
     /** Register a lambda/callable that repeats every interval_ms milliseconds. */
@@ -224,12 +238,30 @@ private:
     EventHandle allocate_callback(Callable callable) {
         for (size_t i = 0; i < MaxCallbacks; ++i) {
             if (!callback_used_[i]) {
-                callback_tasks_[i].set(callable);
+                if (!callback_tasks_[i].set(callable)) {
+                    return EventHandle{};
+                }
                 callback_used_[i] = true;
                 return EventHandle{static_cast<uint16_t>(i), callback_generations_[i]};
             }
         }
         return EventHandle{};
+    }
+
+    void release_registered(EventHandle handle) {
+        if (!handle.assigned() || handle.slot >= MaxCallbacks) {
+            return;
+        }
+        if (!callback_used_[handle.slot] || callback_generations_[handle.slot] != handle.generation) {
+            return;
+        }
+        callback_tasks_[handle.slot].clear();
+        callback_used_[handle.slot] = false;
+        ++callback_generations_[handle.slot];
+    }
+
+    void complete_one_shot(EventHandle handle) {
+        release_registered(handle);
     }
 
     void release_unregistered(EventHandle handle) {

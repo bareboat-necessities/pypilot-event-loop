@@ -10,6 +10,14 @@
 #include "native.hpp"
 #include "pin_event.hpp"
 
+#ifndef PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS
+#define PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS 32
+#endif
+
+#ifndef PYPILOT_EVENT_LOOP_DEFAULT_CALLBACK_STORAGE_SIZE
+#define PYPILOT_EVENT_LOOP_DEFAULT_CALLBACK_STORAGE_SIZE 64
+#endif
+
 namespace pypilot_event_loop {
 
 /**
@@ -23,8 +31,15 @@ namespace pypilot_event_loop {
  * Callback storage is fixed-size. This avoids std::function and heap-heavy
  * callback allocation in Arduino builds. Increase MaxCallbacks or
  * CallbackStorageSize when the application needs more/larger captured lambdas.
+ *
+ * Defaults can be overridden before including pypilot_event_loop.hpp:
+ *
+ *   #define PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS 16
+ *   #define PYPILOT_EVENT_LOOP_DEFAULT_CALLBACK_STORAGE_SIZE 48
+ *   #include <pypilot_event_loop.hpp>
  */
-template<size_t MaxCallbacks = 32, size_t CallbackStorageSize = 64>
+template<size_t MaxCallbacks = PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS,
+         size_t CallbackStorageSize = PYPILOT_EVENT_LOOP_DEFAULT_CALLBACK_STORAGE_SIZE>
 class EventLoop {
 public:
     EventLoop() : scheduler_(clock_) {

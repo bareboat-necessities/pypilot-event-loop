@@ -6,14 +6,18 @@
 
 #include "pypilot_event_loop/pin_event.hpp"
 
+#ifndef PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION
+#define PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION 1
+#endif
+
 namespace pypilot_event_loop {
 
 /**
- * Linux GPIO edge-event source backed by libgpiod v2.
+ * Linux GPIO edge-event source backed by libgpiod.
  *
- * The requested line produces an fd via gpiod_line_request_get_fd(). EventLoop
- * registers that fd with libevent through on_pin_event(). read_event() drains
- * one edge event from libgpiod's edge-event buffer.
+ * CMake selects libgpiod v2 when available and falls back to the v1.6 event API
+ * otherwise. v2 supports kernel debounce configuration; v1.6 ignores the
+ * debounce_us argument because that API has no equivalent per-line setting.
  */
 class LinuxGpiodPinEventSource final : public IPinEventSource {
 public:
@@ -30,25 +34,28 @@ public:
     LinuxGpiodPinEventSource(const LinuxGpiodPinEventSource&) = delete;
     LinuxGpiodPinEventSource& operator=(const LinuxGpiodPinEventSource&) = delete;
 
-    ~LinuxGpiodPinEventSource() override {
-        if (buffer_) {
-            gpiod_edge_event_buffer_free(buffer_);
-        }
-        if (request_) {
-            gpiod_line_request_release(request_);
-        }
-        if (chip_) {
-            gpiod_chip_close(chip_);
-        }
+    ~LinuxGpiodPinEventSource() override { close(); }
+
+    bool valid() const override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        return request_ != nullptr && buffer_ != nullptr;
+#else
+        return chip_ != nullptr && line_ != nullptr;
+#endif
     }
 
-    bool valid() const override { return request_ != nullptr && buffer_ != nullptr; }
-
     int native_fd() const override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         if (!request_) {
             return -1;
         }
         return gpiod_line_request_get_fd(request_);
+#else
+        if (!line_) {
+            return -1;
+        }
+        return gpiod_line_event_get_fd(line_);
+#endif
     }
 
     bool read_event(PinEvent& event) override {
@@ -56,6 +63,7 @@ public:
             return false;
         }
 
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         const int n = gpiod_line_request_read_edge_events(request_, buffer_, 1);
         if (n <= 0) {
             return false;
@@ -74,12 +82,54 @@ public:
         event.sequence = static_cast<uint32_t>(gpiod_edge_event_get_global_seqno(gevent));
         event.level = event.type == PinEventType::RisingEdge;
         return true;
+#else
+        struct gpiod_line_event gevent;
+        const int rc = gpiod_line_event_read(line_, &gevent);
+        if (rc != 0) {
+            return false;
+        }
+        event.type = (gevent.event_type == GPIOD_LINE_EVENT_RISING_EDGE) ? PinEventType::RisingEdge
+                                                                         : PinEventType::FallingEdge;
+        event.timestamp_us = static_cast<uint64_t>(gevent.ts.tv_sec) * 1000000ULL +
+                             static_cast<uint64_t>(gevent.ts.tv_nsec) / 1000ULL;
+        event.source_id = line_offset_;
+        event.sequence = ++sequence_;
+        event.level = event.type == PinEventType::RisingEdge;
+        return true;
+#endif
     }
 
     unsigned int line_offset() const { return line_offset_; }
     PinEventType requested_type() const { return requested_type_; }
 
 private:
+    void close() {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        if (buffer_) {
+            gpiod_edge_event_buffer_free(buffer_);
+            buffer_ = nullptr;
+        }
+        if (request_) {
+            gpiod_line_request_release(request_);
+            request_ = nullptr;
+        }
+        if (chip_) {
+            gpiod_chip_close(chip_);
+            chip_ = nullptr;
+        }
+#else
+        if (line_) {
+            gpiod_line_release(line_);
+            line_ = nullptr;
+        }
+        if (chip_) {
+            gpiod_chip_close(chip_);
+            chip_ = nullptr;
+        }
+#endif
+    }
+
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
     static enum gpiod_line_edge to_gpiod_edge(PinEventType type) {
         switch (type) {
         case PinEventType::RisingEdge:
@@ -87,13 +137,27 @@ private:
         case PinEventType::FallingEdge:
             return GPIOD_LINE_EDGE_FALLING;
         case PinEventType::Change:
-            return GPIOD_LINE_EDGE_BOTH;
         case PinEventType::HighLevel:
         case PinEventType::LowLevel:
             return GPIOD_LINE_EDGE_BOTH;
         }
         return GPIOD_LINE_EDGE_BOTH;
     }
+#else
+    static int request_edge_events_v1(struct gpiod_line* line, PinEventType type, const char* consumer) {
+        switch (type) {
+        case PinEventType::RisingEdge:
+            return gpiod_line_request_rising_edge_events(line, consumer);
+        case PinEventType::FallingEdge:
+            return gpiod_line_request_falling_edge_events(line, consumer);
+        case PinEventType::Change:
+        case PinEventType::HighLevel:
+        case PinEventType::LowLevel:
+            return gpiod_line_request_both_edges_events(line, consumer);
+        }
+        return gpiod_line_request_both_edges_events(line, consumer);
+    }
+#endif
 
     void open(const char* chip_path,
               const char* consumer,
@@ -104,6 +168,7 @@ private:
             return;
         }
 
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         struct gpiod_line_settings* settings = gpiod_line_settings_new();
         struct gpiod_line_config* line_config = gpiod_line_config_new();
         struct gpiod_request_config* request_config = gpiod_request_config_new();
@@ -124,7 +189,7 @@ private:
             return;
         }
 
-        gpiod_request_config_set_consumer(request_config, consumer);
+        gpiod_request_config_set_consumer(request_config, consumer ? consumer : "pypilot-event-loop");
         request_ = gpiod_chip_request_lines(chip_, request_config, line_config);
         cleanup_setup(settings, line_config, request_config);
 
@@ -133,8 +198,21 @@ private:
         }
 
         buffer_ = gpiod_edge_event_buffer_new(event_buffer_capacity);
+#else
+        (void)debounce_us;
+        (void)event_buffer_capacity;
+        line_ = gpiod_chip_get_line(chip_, line_offset_);
+        if (!line_) {
+            close();
+            return;
+        }
+        if (request_edge_events_v1(line_, requested_type_, consumer ? consumer : "pypilot-event-loop") != 0) {
+            close();
+        }
+#endif
     }
 
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
     static void cleanup_setup(struct gpiod_line_settings* settings,
                               struct gpiod_line_config* line_config,
                               struct gpiod_request_config* request_config) {
@@ -148,10 +226,16 @@ private:
             gpiod_line_settings_free(settings);
         }
     }
+#endif
 
     struct gpiod_chip* chip_ = nullptr;
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
     struct gpiod_line_request* request_ = nullptr;
     struct gpiod_edge_event_buffer* buffer_ = nullptr;
+#else
+    struct gpiod_line* line_ = nullptr;
+    uint32_t sequence_ = 0;
+#endif
     unsigned int line_offset_ = 0;
     PinEventType requested_type_ = PinEventType::Change;
 };

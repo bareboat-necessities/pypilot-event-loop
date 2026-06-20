@@ -34,6 +34,13 @@ struct LineProtocolOptions {
 
     char delimiter = '\n';
     bool strip_cr = true;
+
+    /**
+     * When true, an overlong line resets the current buffer and discards the
+     * byte that caused the overflow. Bytes after that overflow byte begin a new
+     * candidate line. When false, overflow bytes are discarded until a delimiter
+     * is observed and the existing truncated buffer is emitted/reset normally.
+     */
     bool drop_overflow = true;
 };
 
@@ -81,7 +88,7 @@ public:
         static_assert(sizeof(Callable) <= StorageSize, "protocol callback is too large for storage");
         static_assert(alignof(Callable) <= alignof(StorageAlignment), "protocol callback alignment is too large for storage");
         clear();
-        new (storage_) Callable(callable);
+        new (storage_) Callable(static_cast<Callable&&>(callable));
         invoke_ = [](void* storage, const ViewType& view) {
             (*static_cast<Callable*>(storage))(view);
         };

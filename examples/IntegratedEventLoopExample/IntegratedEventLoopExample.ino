@@ -21,11 +21,23 @@
 #ifndef PYPILOT_SERIAL_OUT
 #define PYPILOT_SERIAL_OUT Serial1
 #endif
-#ifndef PYPILOT_PIN_READ
-#define PYPILOT_PIN_READ 4
+#ifndef PYPILOT_SERIAL_OUT_RX_PIN
+#define PYPILOT_SERIAL_OUT_RX_PIN 18
 #endif
-#ifndef PYPILOT_PIN_WRITE
-#define PYPILOT_PIN_WRITE 5
+#ifndef PYPILOT_SERIAL_OUT_TX_PIN
+#define PYPILOT_SERIAL_OUT_TX_PIN 17
+#endif
+#ifndef PYPILOT_DIGITAL_IN_PIN
+#define PYPILOT_DIGITAL_IN_PIN 4
+#endif
+#ifndef PYPILOT_DIGITAL_OUT_PIN
+#define PYPILOT_DIGITAL_OUT_PIN 5
+#endif
+#ifndef PYPILOT_ANALOG_IN_PIN
+#define PYPILOT_ANALOG_IN_PIN 1
+#endif
+#ifndef PYPILOT_ANALOG_OUT_PIN
+#define PYPILOT_ANALOG_OUT_PIN 2
 #endif
 #else
 #include <cstdlib>
@@ -52,19 +64,30 @@ NativeUdpDatagramStream udp;
 #if defined(ARDUINO)
 NativeSerialStream serial_in(Serial);
 NativeSerialStream serial_out(PYPILOT_SERIAL_OUT);
-#else
+#endif
+
+#if !defined(ARDUINO)
 NativeSerialStream serial_in;
 NativeSerialStream serial_out;
-bool linux_pin_input = false;
-bool linux_pin_output = false;
 #endif
+
+IDigitalInputPin* digital_in = nullptr;
+IDigitalOutputPin* digital_out = nullptr;
+IAnalogInputPin* analog_in = nullptr;
+IAnalogOutputPin* analog_out = nullptr;
 
 ITcpConnection* tcp_client_connection = nullptr;
 uint32_t tcp_client_tx_count = 0;
 uint32_t udp_tx_count = 0;
 uint32_t serial_tx_count = 0;
-bool pin_output_level = false;
-bool last_pin_input_level = false;
+bool digital_output_level = false;
+bool last_digital_input_level = false;
+int analog_output_value = 0;
+int analog_output_step = 32;
+
+#if defined(ARDUINO)
+bool setup_failed = false;
+#endif
 
 static size_t text_len(const char* text) {
     size_t n = 0;
@@ -89,6 +112,15 @@ static void serial_write_uint32(uint32_t value) {
         const char c = digits[--n];
         serial_out.write(reinterpret_cast<const uint8_t*>(&c), 1);
     }
+}
+
+static void serial_write_int(int value) {
+    if (value < 0) {
+        const char minus = '-';
+        serial_out.write(reinterpret_cast<const uint8_t*>(&minus), 1);
+        value = -value;
+    }
+    serial_write_uint32(static_cast<uint32_t>(value));
 }
 
 static void tcp_write_text(ITcpConnection& connection, const char* text) {
@@ -118,21 +150,56 @@ static void tcp_write_line(ITcpConnection& connection, const char* text) {
     tcp_write_newline(connection);
 }
 
-static bool read_input_pin() {
 #if defined(ARDUINO)
-    return digitalRead(PYPILOT_PIN_READ) == HIGH;
+static bool setup_pins() {
+    static NativeDigitalInputPin digital_in_pin(PYPILOT_DIGITAL_IN_PIN, DigitalPinMode::InputPullup);
+    static NativeDigitalOutputPin digital_out_pin(PYPILOT_DIGITAL_OUT_PIN, false);
+    static NativeAnalogInputPin analog_in_pin(PYPILOT_ANALOG_IN_PIN);
+    static NativeAnalogOutputPin analog_out_pin(PYPILOT_ANALOG_OUT_PIN);
+    digital_in = &digital_in_pin;
+    digital_out = &digital_out_pin;
+    analog_in = &analog_in_pin;
+    analog_out = &analog_out_pin;
+    return digital_in->valid() && digital_out->valid() && analog_in->valid() && analog_out->valid();
+}
 #else
-    linux_pin_input = !linux_pin_input;
-    return linux_pin_input;
+static bool setup_pins(const char* digital_in_path,
+                       const char* digital_out_path,
+                       const char* analog_in_path,
+                       const char* analog_out_path) {
+    static NativeDigitalInputPin digital_in_pin(digital_in_path);
+    static NativeDigitalOutputPin digital_out_pin(digital_out_path);
+    static NativeAnalogInputPin analog_in_pin(analog_in_path);
+    static NativeAnalogOutputPin analog_out_pin(analog_out_path);
+    digital_in = &digital_in_pin;
+    digital_out = &digital_out_pin;
+    analog_in = &analog_in_pin;
+    analog_out = &analog_out_pin;
+    return digital_in->valid() && digital_out->valid() && analog_in->valid() && analog_out->valid();
+}
 #endif
+
+static bool read_digital_input_pin() {
+    return digital_in && digital_in->valid() && digital_in->read();
 }
 
-static void write_output_pin(bool high) {
-#if defined(ARDUINO)
-    digitalWrite(PYPILOT_PIN_WRITE, high ? HIGH : LOW);
-#else
-    linux_pin_output = high;
-#endif
+static void write_digital_output_pin(bool high) {
+    if (digital_out && digital_out->valid()) {
+        digital_out->write(high);
+    }
+}
+
+static int read_analog_input_pin() {
+    if (!analog_in || !analog_in->valid()) {
+        return 0;
+    }
+    return analog_in->read();
+}
+
+static void write_analog_output_pin(int value) {
+    if (analog_out && analog_out->valid()) {
+        analog_out->write(value);
+    }
 }
 
 LineProtocolReader<128> serial_lines(serial_in, LineProtocolOptions{}, [](LineView line) {
@@ -217,7 +284,9 @@ static bool setup_network(const char* client_host, uint16_t client_port, uint16_
     TcpConnectOptions connect_options;
     connect_options.host = client_host;
     connect_options.port = client_port;
-    tcp_client.connect(connect_options, client_handler);
+    if (!tcp_client.connect(connect_options, client_handler)) {
+        serial_write_text("tcp client connect start failed\n");
+    }
 
     if (!udp.bind(0)) {
         serial_write_text("udp bind failed\n");
@@ -256,48 +325,90 @@ static void setup_tasks() {
     });
 
     event_loop.on_repeat(500, []() {
-        const bool level = read_input_pin();
-        if (level != last_pin_input_level) {
-            last_pin_input_level = level;
-            serial_write_text("pin read: ");
+        const bool level = read_digital_input_pin();
+        if (level != last_digital_input_level) {
+            last_digital_input_level = level;
+            serial_write_text("digital read: ");
             serial_write_text(level ? "1\n" : "0\n");
         }
     });
 
     event_loop.on_repeat(1000, []() {
-        pin_output_level = !pin_output_level;
-        write_output_pin(pin_output_level);
-        serial_write_text("pin write: ");
-        serial_write_text(pin_output_level ? "1\n" : "0\n");
+        digital_output_level = !digital_output_level;
+        write_digital_output_pin(digital_output_level);
+        serial_write_text("digital write: ");
+        serial_write_text(digital_output_level ? "1\n" : "0\n");
+    });
+
+    event_loop.on_repeat(1000, []() {
+        serial_write_text("analog read: ");
+        serial_write_int(read_analog_input_pin());
+        serial_write_text("\n");
+    });
+
+    event_loop.on_repeat(1000, []() {
+        write_analog_output_pin(analog_output_value);
+        serial_write_text("analog write: ");
+        serial_write_int(analog_output_value);
+        serial_write_text("\n");
+        analog_output_value += analog_output_step;
+        const int max_value = analog_out ? analog_out->max_value() : 255;
+        if (analog_output_value >= max_value) {
+            analog_output_value = max_value;
+            analog_output_step = -analog_output_step;
+        } else if (analog_output_value <= 0) {
+            analog_output_value = 0;
+            analog_output_step = -analog_output_step;
+        }
     });
 }
 
 #if defined(ARDUINO)
 void setup() {
     Serial.begin(115200);
+#if defined(ESP32)
+    PYPILOT_SERIAL_OUT.begin(115200, SERIAL_8N1, PYPILOT_SERIAL_OUT_RX_PIN, PYPILOT_SERIAL_OUT_TX_PIN);
+#else
     PYPILOT_SERIAL_OUT.begin(115200);
-    pinMode(PYPILOT_PIN_READ, INPUT_PULLUP);
-    pinMode(PYPILOT_PIN_WRITE, OUTPUT);
+#endif
     connect_wifi();
+    if (!setup_pins()) {
+        serial_write_text("integrated event loop pin setup failed\n");
+        setup_failed = true;
+        return;
+    }
     setup_tasks();
-    setup_network(PYPILOT_TCP_CLIENT_HOST, PYPILOT_TCP_CLIENT_PORT, PYPILOT_TCP_SERVER_PORT);
+    if (!setup_network(PYPILOT_TCP_CLIENT_HOST, PYPILOT_TCP_CLIENT_PORT, PYPILOT_TCP_SERVER_PORT)) {
+        serial_write_text("integrated event loop network setup failed\n");
+        setup_failed = true;
+        return;
+    }
     serial_write_text("integrated event loop ready\n");
 }
 
 void loop() {
+    if (setup_failed) {
+        serial_write_text("integrated event loop setup failed\n");
+        delay(1000);
+        return;
+    }
     event_loop.tick();
 }
 #else
 int main(int argc, char** argv) {
-    if (argc < 3) {
-        std::cerr << "usage: integrated_event_loop_example SERIAL_RX_DEVICE SERIAL_TX_DEVICE [TCP_CLIENT_HOST] [TCP_CLIENT_PORT] [TCP_SERVER_PORT]" << std::endl;
+    if (argc < 7) {
+        std::cerr << "usage: integrated_event_loop_example SERIAL_RX_DEVICE SERIAL_TX_DEVICE DIGITAL_IN_FILE DIGITAL_OUT_FILE ANALOG_IN_FILE ANALOG_OUT_FILE [TCP_CLIENT_HOST] [TCP_CLIENT_PORT] [TCP_SERVER_PORT]" << std::endl;
         return 2;
     }
     const char* rx_device = argv[1];
     const char* tx_device = argv[2];
-    const char* client_host = argc > 3 ? argv[3] : "127.0.0.1";
-    const uint16_t client_port = argc > 4 ? static_cast<uint16_t>(std::strtoul(argv[4], nullptr, 10)) : 20220;
-    const uint16_t server_port = argc > 5 ? static_cast<uint16_t>(std::strtoul(argv[5], nullptr, 10)) : 20220;
+    const char* digital_in_path = argv[3];
+    const char* digital_out_path = argv[4];
+    const char* analog_in_path = argv[5];
+    const char* analog_out_path = argv[6];
+    const char* client_host = argc > 7 ? argv[7] : "localhost";
+    const uint16_t client_port = argc > 8 ? static_cast<uint16_t>(std::strtoul(argv[8], nullptr, 10)) : 20220;
+    const uint16_t server_port = argc > 9 ? static_cast<uint16_t>(std::strtoul(argv[9], nullptr, 10)) : 20220;
 
     if (!serial_in.open(rx_device, 115200)) {
         std::cerr << "failed to open serial input" << std::endl;
@@ -305,6 +416,10 @@ int main(int argc, char** argv) {
     }
     if (!serial_out.open(tx_device, 115200)) {
         std::cerr << "failed to open serial output" << std::endl;
+        return 1;
+    }
+    if (!setup_pins(digital_in_path, digital_out_path, analog_in_path, analog_out_path)) {
+        std::cerr << "failed to set up pin files" << std::endl;
         return 1;
     }
 

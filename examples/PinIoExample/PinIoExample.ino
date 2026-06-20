@@ -7,10 +7,10 @@
 #define PYPILOT_DIGITAL_OUT_PIN 5
 #endif
 #ifndef PYPILOT_ANALOG_IN_PIN
-#define PYPILOT_ANALOG_IN_PIN A0
+#define PYPILOT_ANALOG_IN_PIN 1
 #endif
 #ifndef PYPILOT_ANALOG_OUT_PIN
-#define PYPILOT_ANALOG_OUT_PIN 6
+#define PYPILOT_ANALOG_OUT_PIN 2
 #endif
 #else
 #include <cstdlib>

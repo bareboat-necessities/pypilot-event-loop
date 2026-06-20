@@ -24,25 +24,25 @@ inline bool gpiod_chip_path(const char* chip_name, char* dst, size_t dst_size) {
     return true;
 }
 
-inline gpiod_line_request* request_one_gpiod_line(const char* chip_name,
-                                                  unsigned int line_offset,
-                                                  gpiod_line_direction direction,
-                                                  gpiod_line_value output_value,
-                                                  const char* consumer) {
+inline struct gpiod_line_request* request_one_gpiod_line(const char* chip_name,
+                                                         unsigned int line_offset,
+                                                         enum gpiod_line_direction direction,
+                                                         enum gpiod_line_value output_value,
+                                                         const char* consumer) {
     char chip_path[128];
     if (!gpiod_chip_path(chip_name, chip_path, sizeof(chip_path))) {
         return nullptr;
     }
 
-    gpiod_chip* chip = gpiod_chip_open(chip_path);
+    struct gpiod_chip* chip = gpiod_chip_open(chip_path);
     if (!chip) {
         return nullptr;
     }
 
-    gpiod_line_settings* settings = gpiod_line_settings_new();
-    gpiod_line_config* line_config = gpiod_line_config_new();
-    gpiod_request_config* request_config = gpiod_request_config_new();
-    gpiod_line_request* request = nullptr;
+    struct gpiod_line_settings* settings = gpiod_line_settings_new();
+    struct gpiod_line_config* line_config = gpiod_line_config_new();
+    struct gpiod_request_config* request_config = gpiod_request_config_new();
+    struct gpiod_line_request* request = nullptr;
 
     if (!settings || !line_config || !request_config) {
         goto cleanup;
@@ -107,7 +107,7 @@ public:
         if (!request_) {
             return false;
         }
-        const gpiod_line_value value = gpiod_line_request_get_value(request_, line_offset_);
+        const enum gpiod_line_value value = gpiod_line_request_get_value(request_, line_offset_);
         return value == GPIOD_LINE_VALUE_ACTIVE;
     }
 
@@ -120,7 +120,7 @@ private:
     }
 
     unsigned int line_offset_ = 0;
-    gpiod_line_request* request_ = nullptr;
+    struct gpiod_line_request* request_ = nullptr;
 };
 
 /**
@@ -166,7 +166,7 @@ private:
     }
 
     unsigned int line_offset_ = 0;
-    gpiod_line_request* request_ = nullptr;
+    struct gpiod_line_request* request_ = nullptr;
 };
 
 } // namespace pypilot_event_loop

@@ -8,6 +8,10 @@
 
 #include "pypilot_event_loop/pin_io.hpp"
 
+#ifndef PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION
+#define PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION 1
+#endif
+
 namespace pypilot_event_loop {
 
 namespace detail {
@@ -24,11 +28,12 @@ inline bool gpiod_chip_path(const char* chip_name, char* dst, size_t dst_size) {
     return true;
 }
 
-inline struct gpiod_line_request* request_one_gpiod_line(const char* chip_name,
-                                                         unsigned int line_offset,
-                                                         enum gpiod_line_direction direction,
-                                                         enum gpiod_line_value output_value,
-                                                         const char* consumer) {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+inline struct gpiod_line_request* request_one_gpiod_line_v2(const char* chip_name,
+                                                             unsigned int line_offset,
+                                                             enum gpiod_line_direction direction,
+                                                             enum gpiod_line_value output_value,
+                                                             const char* consumer) {
     char chip_path[128];
     if (!gpiod_chip_path(chip_name, chip_path, sizeof(chip_path))) {
         return nullptr;
@@ -73,15 +78,16 @@ cleanup:
     gpiod_chip_close(chip);
     return request;
 }
+#endif
 
 } // namespace detail
 
 /**
- * Linux libgpiod v2 digital input pin.
+ * Linux libgpiod digital input pin.
  *
- * This backend claims the requested GPIO line through a v2 line request and
- * configures it as an input. The chip argument accepts either a full device path
- * such as `/dev/gpiochip0` or a chip name such as `gpiochip0`.
+ * CMake selects libgpiod v2 when available and falls back to the v1.6 line API
+ * otherwise. The chip argument accepts either a full device path such as
+ * `/dev/gpiochip0` or a chip name such as `gpiochip0`.
  */
 class LinuxGpiodDigitalInputPin final : public IDigitalInputPin {
 public:
@@ -89,11 +95,30 @@ public:
                               unsigned int line_offset,
                               const char* consumer = "pypilot_event_loop")
         : line_offset_(line_offset) {
-        request_ = detail::request_one_gpiod_line(chip_name,
-                                                  line_offset_,
-                                                  GPIOD_LINE_DIRECTION_INPUT,
-                                                  GPIOD_LINE_VALUE_INACTIVE,
-                                                  consumer);
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        request_ = detail::request_one_gpiod_line_v2(chip_name,
+                                                     line_offset_,
+                                                     GPIOD_LINE_DIRECTION_INPUT,
+                                                     GPIOD_LINE_VALUE_INACTIVE,
+                                                     consumer);
+#else
+        char chip_path[128];
+        if (!detail::gpiod_chip_path(chip_name, chip_path, sizeof(chip_path))) {
+            return;
+        }
+        chip_ = gpiod_chip_open(chip_path);
+        if (!chip_) {
+            return;
+        }
+        line_ = gpiod_chip_get_line(chip_, line_offset_);
+        if (!line_) {
+            close();
+            return;
+        }
+        if (gpiod_line_request_input(line_, consumer ? consumer : "pypilot_event_loop") != 0) {
+            close();
+        }
+#endif
     }
 
     LinuxGpiodDigitalInputPin(const LinuxGpiodDigitalInputPin&) = delete;
@@ -101,33 +126,62 @@ public:
 
     ~LinuxGpiodDigitalInputPin() override { close(); }
 
-    bool valid() const override { return request_ != nullptr; }
+    bool valid() const override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        return request_ != nullptr;
+#else
+        return chip_ != nullptr && line_ != nullptr;
+#endif
+    }
 
     bool read() override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         if (!request_) {
             return false;
         }
         const enum gpiod_line_value value = gpiod_line_request_get_value(request_, line_offset_);
         return value == GPIOD_LINE_VALUE_ACTIVE;
+#else
+        if (!line_) {
+            return false;
+        }
+        return gpiod_line_get_value(line_) > 0;
+#endif
     }
 
 private:
     void close() {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         if (request_) {
             gpiod_line_request_release(request_);
             request_ = nullptr;
         }
+#else
+        if (line_) {
+            gpiod_line_release(line_);
+            line_ = nullptr;
+        }
+        if (chip_) {
+            gpiod_chip_close(chip_);
+            chip_ = nullptr;
+        }
+#endif
     }
 
     unsigned int line_offset_ = 0;
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
     struct gpiod_line_request* request_ = nullptr;
+#else
+    struct gpiod_chip* chip_ = nullptr;
+    struct gpiod_line* line_ = nullptr;
+#endif
 };
 
 /**
- * Linux libgpiod v2 digital output pin.
+ * Linux libgpiod digital output pin.
  *
- * This backend claims the requested GPIO line through a v2 line request and
- * configures it as an output with the requested initial level.
+ * CMake selects libgpiod v2 when available and falls back to the v1.6 line API
+ * otherwise.
  */
 class LinuxGpiodDigitalOutputPin final : public IDigitalOutputPin {
 public:
@@ -136,11 +190,30 @@ public:
                                bool initial = false,
                                const char* consumer = "pypilot_event_loop")
         : line_offset_(line_offset) {
-        request_ = detail::request_one_gpiod_line(chip_name,
-                                                  line_offset_,
-                                                  GPIOD_LINE_DIRECTION_OUTPUT,
-                                                  initial ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE,
-                                                  consumer);
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        request_ = detail::request_one_gpiod_line_v2(chip_name,
+                                                     line_offset_,
+                                                     GPIOD_LINE_DIRECTION_OUTPUT,
+                                                     initial ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE,
+                                                     consumer);
+#else
+        char chip_path[128];
+        if (!detail::gpiod_chip_path(chip_name, chip_path, sizeof(chip_path))) {
+            return;
+        }
+        chip_ = gpiod_chip_open(chip_path);
+        if (!chip_) {
+            return;
+        }
+        line_ = gpiod_chip_get_line(chip_, line_offset_);
+        if (!line_) {
+            close();
+            return;
+        }
+        if (gpiod_line_request_output(line_, consumer ? consumer : "pypilot_event_loop", initial ? 1 : 0) != 0) {
+            close();
+        }
+#endif
     }
 
     LinuxGpiodDigitalOutputPin(const LinuxGpiodDigitalOutputPin&) = delete;
@@ -148,25 +221,54 @@ public:
 
     ~LinuxGpiodDigitalOutputPin() override { close(); }
 
-    bool valid() const override { return request_ != nullptr; }
+    bool valid() const override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
+        return request_ != nullptr;
+#else
+        return chip_ != nullptr && line_ != nullptr;
+#endif
+    }
 
     bool write(bool high) override {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         if (!request_) {
             return false;
         }
         return gpiod_line_request_set_value(request_, line_offset_, high ? GPIOD_LINE_VALUE_ACTIVE : GPIOD_LINE_VALUE_INACTIVE) == 0;
+#else
+        if (!line_) {
+            return false;
+        }
+        return gpiod_line_set_value(line_, high ? 1 : 0) == 0;
+#endif
     }
 
 private:
     void close() {
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
         if (request_) {
             gpiod_line_request_release(request_);
             request_ = nullptr;
         }
+#else
+        if (line_) {
+            gpiod_line_release(line_);
+            line_ = nullptr;
+        }
+        if (chip_) {
+            gpiod_chip_close(chip_);
+            chip_ = nullptr;
+        }
+#endif
     }
 
     unsigned int line_offset_ = 0;
+#if PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION >= 2
     struct gpiod_line_request* request_ = nullptr;
+#else
+    struct gpiod_chip* chip_ = nullptr;
+    struct gpiod_line* line_ = nullptr;
+#endif
 };
 
 } // namespace pypilot_event_loop

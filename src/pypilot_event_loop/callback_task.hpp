@@ -28,6 +28,7 @@ public:
     template<typename Callable>
     bool set(Callable callable) {
         static_assert(sizeof(Callable) <= StorageSize, "callback object is too large for CallbackTask storage");
+        static_assert(alignof(Callable) <= alignof(max_align_t), "callback object alignment is too large for CallbackTask storage");
         clear();
         if (invoking_) {
             return false;
@@ -88,7 +89,7 @@ private:
         destroy_ = nullptr;
     }
 
-    alignas(void*) unsigned char storage_[StorageSize]{};
+    alignas(max_align_t) unsigned char storage_[StorageSize]{};
     void (*invoke_)(void*, uint64_t) = nullptr;
     void (*destroy_)(void*) = nullptr;
     bool active_ = false;

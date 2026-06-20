@@ -1,11 +1,24 @@
 #pragma once
 
 #include <stddef.h>
+#include <type_traits>
 
 namespace pypilot_event_loop {
 
+/**
+ * Small fixed-capacity vector for trivially managed element types.
+ *
+ * This container intentionally avoids placement-new/destructor bookkeeping for
+ * Arduino-size builds. It is only valid for types that can be overwritten,
+ * shifted, and logically erased without running per-element destructors.
+ */
 template<typename T, size_t Capacity>
 class FixedVector final {
+    static_assert(std::is_trivially_destructible<T>::value,
+                  "FixedVector requires trivially destructible element types");
+    static_assert(std::is_trivially_copy_assignable<T>::value,
+                  "FixedVector requires trivially copy assignable element types");
+
 public:
     bool push_back(const T& value) {
         if (size_ >= Capacity) {

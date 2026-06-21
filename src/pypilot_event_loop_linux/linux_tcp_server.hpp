@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/time.h>
 
 #include <memory>
 #include <vector>
@@ -43,6 +44,8 @@ public:
     bool peek(uint8_t* dst, size_t len) override;
     bool read_exact(uint8_t* dst, size_t len) override;
     bool read_line(char* dst, size_t max_len, bool strip_cr = true) override;
+    bool set_timeouts(const TcpTimeoutOptions& options) override;
+    bool set_watermarks(const TcpWatermarkOptions& options) override;
 
 private:
     friend class LinuxTcpServer;
@@ -315,6 +318,33 @@ inline bool LinuxTcpConnection::read_line(char* dst, size_t max_len, bool strip_
     return true;
 }
 
+inline bool LinuxTcpConnection::set_timeouts(const TcpTimeoutOptions& options) {
+    if (!bev_) return false;
+    timeval read_timeout{};
+    timeval write_timeout{};
+    timeval* read_ptr = nullptr;
+    timeval* write_ptr = nullptr;
+    if (options.read_timeout_ms != 0) {
+        read_timeout.tv_sec = static_cast<long>(options.read_timeout_ms / 1000);
+        read_timeout.tv_usec = static_cast<long>((options.read_timeout_ms % 1000) * 1000);
+        read_ptr = &read_timeout;
+    }
+    if (options.write_timeout_ms != 0) {
+        write_timeout.tv_sec = static_cast<long>(options.write_timeout_ms / 1000);
+        write_timeout.tv_usec = static_cast<long>((options.write_timeout_ms % 1000) * 1000);
+        write_ptr = &write_timeout;
+    }
+    bufferevent_set_timeouts(bev_, read_ptr, write_ptr);
+    return true;
+}
+
+inline bool LinuxTcpConnection::set_watermarks(const TcpWatermarkOptions& options) {
+    if (!bev_) return false;
+    bufferevent_setwatermark(bev_, EV_READ, options.read_low, options.read_high);
+    bufferevent_setwatermark(bev_, EV_WRITE, options.write_low, options.write_high);
+    return true;
+}
+
 inline void LinuxTcpConnection::read_callback(bufferevent*, void* ctx) {
     auto* self = static_cast<LinuxTcpConnection*>(ctx);
     LinuxTcpServer* owner = self ? self->owner_ : nullptr;
@@ -349,7 +379,10 @@ inline void LinuxTcpConnection::event_callback(bufferevent*, short events, void*
 }
 
 inline void LinuxTcpConnection::notify_event(short events) {
-    if (events & BEV_EVENT_ERROR) {
+    if (events & BEV_EVENT_TIMEOUT) {
+        handler_.on_error(*this, ETIMEDOUT);
+        close();
+    } else if (events & BEV_EVENT_ERROR) {
         handler_.on_error(*this, EVUTIL_SOCKET_ERROR());
         close();
     } else if (events & BEV_EVENT_EOF) {

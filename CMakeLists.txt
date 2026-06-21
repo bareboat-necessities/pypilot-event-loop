@@ -79,6 +79,8 @@ add_unit_test(test_tcp_disconnect_detection tests/test_tcp_disconnect_detection.
 add_unit_test(test_tcp_client_disconnect tests/test_tcp_client_disconnect.cpp)
 add_unit_test(test_tcp_listener_lifecycle tests/test_tcp_listener_lifecycle.cpp)
 add_unit_test(test_tcp_close_closes_clients tests/test_tcp_close_closes_clients.cpp)
+add_unit_test(test_tcp_output_buffer tests/test_tcp_output_buffer.cpp)
+add_unit_test(test_udp_peer tests/test_udp_peer.cpp)
 
 if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
     add_unit_test(test_linux_gpiod_pin_io_compile tests/test_linux_gpiod_pin_io_compile.cpp)
@@ -86,7 +88,7 @@ if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
 endif()
 
 add_linux_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.cpp)
-add_linux_example(line_protocol_example examples/LineProtocolExample/LineProtocolExample.cpp)
+add_linux_example(line_protocol_example examples/LineProtocolExample.cpp)
 add_linux_example(fixed_header_protocol_example examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.cpp)
 add_linux_example(serial_line_protocol_example examples/SerialLineProtocolExample/SerialLineProtocolExample.cpp)
 add_linux_example(tcp_line_client_example examples/TcpLineClientExample/TcpLineClientExample.cpp)

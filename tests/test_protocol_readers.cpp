@@ -41,6 +41,74 @@ int main() {
 
     {
         MemoryByteStream<64> stream;
+        int lines = 0;
+        char captured[2][16]{};
+
+        LineProtocolReader<16> reader(stream, LineProtocolOptions{}, [&](LineView line) {
+            assert(lines < 2);
+            memcpy(captured[lines], line.data, line.size);
+            captured[lines][line.size] = '\0';
+            ++lines;
+        });
+
+        const uint8_t part1[] = {'p','a','r','t'};
+        const uint8_t part2[] = {'i','a','l','\n','n','e','x','t','\n'};
+        assert(stream.write(part1, sizeof(part1)) == static_cast<int>(sizeof(part1)));
+        reader.poll(0);
+        assert(lines == 0);
+        assert(reader.stats().messages == 0);
+
+        assert(stream.write(part2, sizeof(part2)) == static_cast<int>(sizeof(part2)));
+        reader.poll(0);
+        assert(lines == 2);
+        assert(strcmp(captured[0], "partial") == 0);
+        assert(strcmp(captured[1], "next") == 0);
+    }
+
+    {
+        MemoryByteStream<64> stream;
+        int lines = 0;
+        size_t sizes[2]{};
+
+        LineProtocolReader<4> reader(stream, LineProtocolOptions{}, [&](LineView line) {
+            assert(lines < 2);
+            sizes[lines++] = line.size;
+        });
+
+        const uint8_t data[] = {'a','b','c','d','e','\n','o','k','\n'};
+        assert(stream.write(data, sizeof(data)) == static_cast<int>(sizeof(data)));
+        reader.poll(0);
+
+        assert(reader.stats().overflows == 1);
+        assert(lines == 2);
+        assert(sizes[0] == 0);
+        assert(sizes[1] == 2);
+    }
+
+    {
+        MemoryByteStream<64> stream;
+        int lines = 0;
+        char captured[2][8]{};
+
+        LineProtocolReader<4> reader(stream, LineProtocolOptions{'\n', true, false}, [&](LineView line) {
+            assert(lines < 2);
+            memcpy(captured[lines], line.data, line.size);
+            captured[lines][line.size] = '\0';
+            ++lines;
+        });
+
+        const uint8_t data[] = {'a','b','c','d','e','f','\n','o','k','\n'};
+        assert(stream.write(data, sizeof(data)) == static_cast<int>(sizeof(data)));
+        reader.poll(0);
+
+        assert(reader.stats().overflows == 2);
+        assert(lines == 2);
+        assert(strcmp(captured[0], "abcd") == 0);
+        assert(strcmp(captured[1], "ok") == 0);
+    }
+
+    {
+        MemoryByteStream<64> stream;
         int frames = 0;
         uint8_t captured[2][3]{};
 

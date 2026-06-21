@@ -18,6 +18,11 @@ struct TcpConnectOptions {
     uint16_t port = 0;
 };
 
+struct TcpTimeoutOptions {
+    uint32_t read_timeout_ms = 0;
+    uint32_t write_timeout_ms = 0;
+};
+
 struct TcpPeerInfo {
     char host[64]{};
     uint16_t port = 0;

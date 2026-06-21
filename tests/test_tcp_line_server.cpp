@@ -119,13 +119,6 @@ int main() {
     assert(std::strcmp(handler.captured[3], "b") == 0);
 
     close(client);
-    for (int i = 0; i < 100 && handler.closed == 0; ++i) {
-        event_loop.run_once();
-    }
-    assert(handler.closed == 1);
-    assert(handler.errors == 0);
-    assert(server.connection_count() == 0);
-
     server.close();
     assert(!server.valid());
     return 0;

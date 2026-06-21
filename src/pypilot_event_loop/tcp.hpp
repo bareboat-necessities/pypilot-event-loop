@@ -52,6 +52,16 @@ public:
     virtual bool peek(uint8_t* dst, size_t len) = 0;
     virtual bool read_exact(uint8_t* dst, size_t len) = 0;
     virtual bool read_line(char* dst, size_t max_len, bool strip_cr = true) = 0;
+
+    virtual bool set_timeouts(const TcpTimeoutOptions& options) {
+        (void)options;
+        return false;
+    }
+
+    virtual bool set_watermarks(const TcpWatermarkOptions& options) {
+        (void)options;
+        return false;
+    }
 };
 
 class ITcpServerHandler {

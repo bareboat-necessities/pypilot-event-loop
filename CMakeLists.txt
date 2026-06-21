@@ -28,10 +28,7 @@ else()
 endif()
 
 add_library(pypilot_event_loop INTERFACE)
-target_include_directories(pypilot_event_loop INTERFACE
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${LIBEVENT_INCLUDE_DIRS}
-)
+target_include_directories(pypilot_event_loop INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src ${LIBEVENT_INCLUDE_DIRS})
 target_link_directories(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARY_DIRS})
 target_link_libraries(pypilot_event_loop INTERFACE ${LIBEVENT_LIBRARIES})
 target_compile_options(pypilot_event_loop INTERFACE ${LIBEVENT_CFLAGS_OTHER})
@@ -41,9 +38,7 @@ if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
     target_link_directories(pypilot_event_loop INTERFACE ${PYPILOT_EVENT_LOOP_GPIOD_LIBRARY_DIRS})
     target_link_libraries(pypilot_event_loop INTERFACE ${PYPILOT_EVENT_LOOP_GPIOD_LIBRARIES})
     target_compile_options(pypilot_event_loop INTERFACE ${PYPILOT_EVENT_LOOP_GPIOD_CFLAGS_OTHER})
-    target_compile_definitions(pypilot_event_loop INTERFACE
-        PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION=${PYPILOT_EVENT_LOOP_GPIOD_API_VERSION}
-    )
+    target_compile_definitions(pypilot_event_loop INTERFACE PYPILOT_EVENT_LOOP_LINUX_GPIOD_API_VERSION=${PYPILOT_EVENT_LOOP_GPIOD_API_VERSION})
 endif()
 
 enable_testing()
@@ -80,6 +75,7 @@ add_unit_test(test_tcp_client_disconnect tests/test_tcp_client_disconnect.cpp)
 add_unit_test(test_tcp_listener_lifecycle tests/test_tcp_listener_lifecycle.cpp)
 add_unit_test(test_tcp_close_closes_clients tests/test_tcp_close_closes_clients.cpp)
 add_unit_test(test_tcp_output_buffer tests/test_tcp_output_buffer.cpp)
+add_unit_test(test_tcp_timeout_watermark tests/test_tcp_timeout_watermark.cpp)
 add_unit_test(test_udp_peer tests/test_udp_peer.cpp)
 
 if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
@@ -88,16 +84,15 @@ if(PYPILOT_EVENT_LOOP_GPIOD_FOUND)
 endif()
 
 add_linux_example(event_loop_timer_example examples/EventLoopTimerExample/EventLoopTimerExample.cpp)
-add_linux_example(line_protocol_example examples/LineProtocolExample.cpp)
+add_linux_example(line_protocol_example examples/LineProtocolExample/LineProtocolExample.cpp)
 add_linux_example(fixed_header_protocol_example examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.cpp)
 add_linux_example(serial_line_protocol_example examples/SerialLineProtocolExample/SerialLineProtocolExample.cpp)
 add_linux_example(tcp_line_client_example examples/TcpLineClientExample/TcpLineClientExample.cpp)
 add_linux_example(udp_broadcast_sender_example examples/UdpBroadcastSenderExample/UdpBroadcastSenderExample.cpp)
 add_linux_example(udp_receiver_example examples/UdpReceiverExample/UdpReceiverExample.cpp)
 add_linux_example(pin_io_example examples/PinIoExample/PinIoExample.cpp)
-add_linux_example(integrated_event_loop_example examples/IntegratedEventLoopExample/IntegratedEventLoopExample.cpp)
+add_linux_example(integrated_event_loop_example examples/IntegratedEventLoopExample.cpp)
 add_linux_example(pin_event_example examples/PinEventExample/PinEventExample.cpp)
-
 add_linux_example(tcp_line_server_example examples/TcpLineServerExample/TcpLineServerExample.cpp)
 add_linux_example(tcp_fixed_header_server_example examples/TcpFixedHeaderServerExample/TcpFixedHeaderServerExample.cpp)
 add_linux_example(tcp_disconnect_server_example examples/TcpDisconnectServerExample/TcpDisconnectServerExample.cpp)

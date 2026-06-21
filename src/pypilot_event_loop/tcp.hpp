@@ -23,6 +23,13 @@ struct TcpTimeoutOptions {
     uint32_t write_timeout_ms = 0;
 };
 
+struct TcpWatermarkOptions {
+    size_t read_low = 0;
+    size_t read_high = 0;
+    size_t write_low = 0;
+    size_t write_high = 0;
+};
+
 struct TcpPeerInfo {
     char host[64]{};
     uint16_t port = 0;

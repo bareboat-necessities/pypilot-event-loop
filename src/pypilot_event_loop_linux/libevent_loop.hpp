@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stdint.h>
 #include <sys/time.h>
 #include <event2/event.h>
@@ -268,15 +269,24 @@ private:
         return tv;
     }
 
+    void enter_callback() { ++callback_depth_; }
+
+    void leave_callback() {
+        assert(callback_depth_ > 0);
+        if (callback_depth_ > 0) {
+            --callback_depth_;
+        }
+    }
+
     static void timer_callback(evutil_socket_t, short, void* arg) {
         auto* item = static_cast<TimerEvent*>(arg);
         if (!item || !item->loop || item->removed || !item->task) {
             return;
         }
         LinuxLibeventLoop* loop = item->loop;
-        ++loop->callback_depth_;
+        loop->enter_callback();
         item->task->poll(loop->clock_.micros());
-        --loop->callback_depth_;
+        loop->leave_callback();
         if (!item->removed && item->periodic && item->ev) {
             timeval tv = timeval_from_us(item->period_us);
             evtimer_add(item->ev, &tv);
@@ -293,9 +303,9 @@ private:
             return;
         }
         LinuxLibeventLoop* loop = item->loop;
-        ++loop->callback_depth_;
+        loop->enter_callback();
         item->task->poll(loop->clock_.micros());
-        --loop->callback_depth_;
+        loop->leave_callback();
         loop->compact_removed_events();
     }
 
@@ -304,7 +314,7 @@ private:
     std::vector<std::unique_ptr<TimerEvent> > periodic_events_;
     std::vector<std::unique_ptr<TimerEvent> > one_shot_events_;
     std::vector<std::unique_ptr<FdEvent> > fd_events_;
-    unsigned callback_depth_ = 0;
+    int callback_depth_ = 0;
 };
 
 } // namespace pypilot_event_loop

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <stddef.h>
+
 #if defined(ARDUINO)
 #include "pypilot_event_loop_arduino/arduino_clock.hpp"
 #include "pypilot_event_loop_arduino/arduino_loop.hpp"
@@ -7,6 +9,9 @@
 namespace pypilot_event_loop {
 using NativeClock = ArduinoClock;
 using NativeScheduler = ArduinoLoop;
+
+template<size_t MaxCallbacks>
+using NativeSchedulerFor = ArduinoLoopImpl<MaxCallbacks>;
 } // namespace pypilot_event_loop
 
 #elif defined(__linux__)
@@ -16,6 +21,9 @@ using NativeScheduler = ArduinoLoop;
 namespace pypilot_event_loop {
 using NativeClock = LinuxMonotonicClock;
 using NativeScheduler = LinuxLibeventLoop;
+
+template<size_t>
+using NativeSchedulerFor = LinuxLibeventLoop;
 } // namespace pypilot_event_loop
 
 #else

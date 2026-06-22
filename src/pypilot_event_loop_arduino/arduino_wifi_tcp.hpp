@@ -64,11 +64,18 @@ public:
         return static_cast<int>(client_.write(src, len));
     }
 
+    static constexpr size_t max_peek_size() { return 1; }
+
+    /**
+     * Arduino WiFiClient exposes only one-byte lookahead. Multi-byte protocol
+     * headers must use read_exact() after input_size() reports enough bytes, or
+     * wrap this connection in a buffering protocol reader.
+     */
     bool peek(uint8_t* dst, size_t len) override {
         if (!active_ || !dst || len == 0 || client_.available() < static_cast<int>(len)) {
             return false;
         }
-        if (len != 1) {
+        if (len != max_peek_size()) {
             return false;
         }
         const int c = client_.peek();

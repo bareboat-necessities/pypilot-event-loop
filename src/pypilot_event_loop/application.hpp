@@ -31,6 +31,8 @@ namespace pypilot_event_loop {
  * Callback storage is fixed-size. This avoids std::function and heap-heavy
  * callback allocation in Arduino builds. Increase MaxCallbacks or
  * CallbackStorageSize when the application needs more/larger captured lambdas.
+ * On Arduino, the cooperative scheduler capacity is bound to MaxCallbacks, so
+ * EventLoop<64> has 64 callback slots and 64 backing Arduino task slots.
  *
  * Defaults can be overridden before including pypilot_event_loop.hpp:
  *
@@ -161,6 +163,9 @@ public:
      * Linux fd-backed streams are registered with the native libevent fd
      * readiness backend. Streams without a native fd, such as Arduino Stream
      * wrappers or static test streams, are checked cooperatively from tick().
+     *
+     * The stream object is captured by reference and must outlive the returned
+     * EventHandle or be removed before the stream is destroyed.
      */
     template<typename Callable>
     EventHandle on_bytes_ready(IByteStream& stream,
@@ -181,7 +186,12 @@ public:
         return handle;
     }
 
-    /** Register a datagram-stream data-ready callback. */
+    /**
+     * Register a datagram-stream data-ready callback.
+     *
+     * The datagram stream object is captured by reference and must outlive the
+     * returned EventHandle or be removed before the stream is destroyed.
+     */
     template<typename Callable>
     EventHandle on_bytes_ready(IDatagramStream& stream,
                                Callable callable,
@@ -207,6 +217,9 @@ public:
      * Linux gpiod-backed sources return a native fd and are integrated with
      * libevent readiness. Cooperative sources return -1 and are checked from
      * tick(). The callable must accept `const PinEvent&`.
+     *
+     * The event source object is captured by reference and must outlive the
+     * returned EventHandle or be removed before the source is destroyed.
      */
     template<typename Callable>
     EventHandle on_pin_event(IPinEventSource& source,
@@ -244,7 +257,7 @@ public:
     NativeClock& clock() { return clock_; }
 
     /** Access the native scheduler for fd readiness or lower-level integrations. */
-    NativeScheduler& scheduler() { return scheduler_; }
+    NativeSchedulerFor<MaxCallbacks>& scheduler() { return scheduler_; }
 
 private:
     template<typename Callable>
@@ -316,7 +329,7 @@ private:
     }
 
     NativeClock clock_;
-    NativeScheduler scheduler_;
+    NativeSchedulerFor<MaxCallbacks> scheduler_;
     CallbackTask<CallbackStorageSize> callback_tasks_[MaxCallbacks];
     uint16_t callback_generations_[MaxCallbacks]{};
     bool callback_used_[MaxCallbacks]{};

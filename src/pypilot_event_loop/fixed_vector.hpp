@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stddef.h>
 #include <type_traits>
 
@@ -53,8 +54,15 @@ public:
     bool empty() const { return size_ == 0; }
     bool full() const { return size_ >= Capacity; }
 
-    T& operator[](size_t index) { return items_[index]; }
-    const T& operator[](size_t index) const { return items_[index]; }
+    T& operator[](size_t index) {
+        assert(index < size_);
+        return items_[index];
+    }
+
+    const T& operator[](size_t index) const {
+        assert(index < size_);
+        return items_[index];
+    }
 
 private:
     T items_[Capacity]{};

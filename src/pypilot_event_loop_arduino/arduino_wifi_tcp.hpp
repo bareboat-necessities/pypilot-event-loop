@@ -140,7 +140,7 @@ private:
 
 class ArduinoWiFiTcpServer final : public IRuntimeTask {
 public:
-    explicit ArduinoWiFiTcpServer(ArduinoLoop& loop, size_t max_connections = 4)
+    explicit ArduinoWiFiTcpServer(IScheduler& loop, size_t max_connections = 4)
         : loop_(loop), max_connections_(max_connections > max_slots ? max_slots : max_connections) {
         registered_ = loop_.add_periodic(*this, 1000);
     }
@@ -239,7 +239,7 @@ private:
     }
 
     static constexpr size_t max_slots = 4;
-    ArduinoLoop& loop_;
+    IScheduler& loop_;
     size_t max_connections_ = max_slots;
     WiFiServer* server_ = nullptr;
     ITcpServerHandler* handler_ = nullptr;
@@ -251,7 +251,7 @@ private:
 
 class ArduinoWiFiTcpClient final : public IRuntimeTask {
 public:
-    explicit ArduinoWiFiTcpClient(ArduinoLoop& loop) : loop_(loop) {
+    explicit ArduinoWiFiTcpClient(IScheduler& loop) : loop_(loop) {
         registered_ = loop_.add_periodic(*this, 1000);
     }
 
@@ -303,7 +303,7 @@ public:
     }
 
 private:
-    ArduinoLoop& loop_;
+    IScheduler& loop_;
     ITcpClientHandler* handler_ = nullptr;
     bool registered_ = false;
     ArduinoWiFiTcpConnection connection_;

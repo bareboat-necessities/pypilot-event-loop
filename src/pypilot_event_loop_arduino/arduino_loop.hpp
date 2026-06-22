@@ -7,11 +7,16 @@
 #include "pypilot_event_loop/scheduler.hpp"
 #include "pypilot_event_loop/clock.hpp"
 
+#ifndef PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS
+#define PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS 32
+#endif
+
 namespace pypilot_event_loop {
 
-class ArduinoLoop final : public IScheduler {
+template<size_t MaxTasks>
+class ArduinoLoopImpl final : public IScheduler {
 public:
-    explicit ArduinoLoop(IClock& clock) : clock_(clock) {}
+    explicit ArduinoLoopImpl(IClock& clock) : clock_(clock) {}
 
     bool valid() const override { return true; }
 
@@ -97,6 +102,8 @@ public:
     void request_exit() override { exit_requested_ = true; }
     void tick() { run_once(); }
 
+    static constexpr size_t capacity() { return MaxTasks; }
+
 private:
     struct TaskSlot {
         IRuntimeTask* task = nullptr;
@@ -105,8 +112,6 @@ private:
         bool periodic = false;
         bool active = false;
     };
-
-    static constexpr size_t MaxTasks = 32;
 
     void compact_inactive() {
         for (size_t i = 0; i < task_count_;) {
@@ -142,5 +147,7 @@ private:
     bool exit_requested_ = false;
     bool running_ = false;
 };
+
+using ArduinoLoop = ArduinoLoopImpl<PYPILOT_EVENT_LOOP_DEFAULT_MAX_CALLBACKS>;
 
 } // namespace pypilot_event_loop

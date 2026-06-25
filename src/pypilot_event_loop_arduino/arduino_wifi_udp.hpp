@@ -19,6 +19,14 @@ public:
         return bound_;
     }
 
+    void close() {
+        udp_.stop();
+        packet_size_ = 0;
+        bound_ = false;
+        has_remote_ = false;
+        remote_port_ = 0;
+    }
+
     bool set_remote(const char* host, uint16_t port) override {
         if (!host || port == 0) {
             return false;

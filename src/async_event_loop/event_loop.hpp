@@ -4,10 +4,10 @@
 #include <stdint.h>
 
 #include "byte_stream.hpp"
-#include "callback_task.hpp"
 #include "datagram_stream.hpp"
 #include "native.hpp"
 #include "pin_io.hpp"
+#include "scheduler.hpp"
 
 #ifndef ASYNC_EVENT_LOOP_DEFAULT_MAX_CALLBACKS
 #if defined(ARDUINO)

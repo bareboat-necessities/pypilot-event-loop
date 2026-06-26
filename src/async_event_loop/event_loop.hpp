@@ -3,8 +3,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "byte_stream.hpp"
-#include "datagram_stream.hpp"
 #include "native.hpp"
 #include "pin_io.hpp"
 #include "scheduler.hpp"
@@ -22,6 +20,47 @@
 #endif
 
 namespace async_event_loop {
+
+/**
+ * Portable byte stream interface.
+ *
+ * Linux fd-backed implementations should return a non-negative native_fd() so
+ * EventLoop can use libevent fd readiness. Arduino and in-memory streams return
+ * -1 and are checked cooperatively from tick().
+ */
+class IByteStream {
+public:
+    virtual ~IByteStream() = default;
+
+    virtual int read(uint8_t* dst, size_t max_len) = 0;
+    virtual int write(const uint8_t* src, size_t len) = 0;
+
+    virtual bool readable() const = 0;
+    virtual bool writable() const = 0;
+    virtual bool valid() const = 0;
+
+    virtual int native_fd() const { return -1; }
+};
+
+/**
+ * Portable datagram stream interface.
+ *
+ * Linux fd-backed implementations should return a non-negative native_fd() so
+ * EventLoop can use libevent fd readiness. Arduino and in-memory streams return
+ * -1 and are checked cooperatively from tick().
+ */
+class IDatagramStream {
+public:
+    virtual ~IDatagramStream() = default;
+
+    virtual int recv(uint8_t* dst, size_t max_len) = 0;
+    virtual int send(const uint8_t* src, size_t len) = 0;
+
+    virtual bool readable() const = 0;
+    virtual bool valid() const = 0;
+
+    virtual int native_fd() const { return -1; }
+};
 
 /**
  * Stable handle for an event-loop callback slot.

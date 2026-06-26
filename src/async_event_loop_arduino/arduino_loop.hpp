@@ -5,7 +5,6 @@
 #include <Arduino.h>
 #endif
 #include "async_event_loop/scheduler.hpp"
-#include "async_event_loop/clock.hpp"
 
 #ifndef ASYNC_EVENT_LOOP_DEFAULT_MAX_CALLBACKS
 #define ASYNC_EVENT_LOOP_DEFAULT_MAX_CALLBACKS 32

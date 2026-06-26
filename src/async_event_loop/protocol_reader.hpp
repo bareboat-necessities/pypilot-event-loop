@@ -4,8 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "byte_stream.hpp"
-#include "scheduler.hpp"
+#include "event_loop.hpp"
 
 namespace async_event_loop {
 

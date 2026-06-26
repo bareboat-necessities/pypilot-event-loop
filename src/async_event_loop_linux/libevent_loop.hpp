@@ -10,7 +10,6 @@
 #include <vector>
 
 #include "async_event_loop/scheduler.hpp"
-#include "async_event_loop/clock.hpp"
 
 namespace async_event_loop {
 

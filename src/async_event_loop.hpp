@@ -13,5 +13,4 @@
 #include "async_event_loop/native_udp.hpp"
 #include "async_event_loop/native_tcp.hpp"
 #include "async_event_loop/native_pin_io.hpp"
-#include "async_event_loop/callback_task.hpp"
 #include "async_event_loop/event_loop.hpp"

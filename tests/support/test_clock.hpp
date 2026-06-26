@@ -1,6 +1,6 @@
 #pragma once
 
-#include "async_event_loop/clock.hpp"
+#include "async_event_loop/scheduler.hpp"
 
 namespace async_event_loop_test {
 

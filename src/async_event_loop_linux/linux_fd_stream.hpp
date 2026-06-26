@@ -6,7 +6,7 @@
 #include <stddef.h>
 #include <unistd.h>
 
-#include "async_event_loop/byte_stream.hpp"
+#include "async_event_loop/event_loop.hpp"
 
 namespace async_event_loop {
 

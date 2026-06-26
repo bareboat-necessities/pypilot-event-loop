@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "async_event_loop/pin_event.hpp"
+#include "async_event_loop/pin_io.hpp"
 
 #ifndef ASYNC_EVENT_LOOP_LINUX_GPIOD_API_VERSION
 #define ASYNC_EVENT_LOOP_LINUX_GPIOD_API_VERSION 1

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "async_event_loop/status.hpp"
-#include "async_event_loop/timer.hpp"
 #include "async_event_loop/event_handle.hpp"
 #include "async_event_loop/byte_stream.hpp"
 #include "async_event_loop/datagram_stream.hpp"
@@ -16,5 +15,4 @@
 #include "async_event_loop/native_tcp.hpp"
 #include "async_event_loop/native_pin_io.hpp"
 #include "async_event_loop/callback_task.hpp"
-#include "async_event_loop/pin_event.hpp"
 #include "async_event_loop/application.hpp"

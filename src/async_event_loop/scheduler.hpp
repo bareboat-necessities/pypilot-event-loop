@@ -1,9 +1,20 @@
 #pragma once
 
 #include <stdint.h>
-#include "task.hpp"
 
 namespace async_event_loop {
+
+class IClock {
+public:
+    virtual ~IClock() = default;
+    virtual uint64_t micros() const = 0;
+};
+
+class IRuntimeTask {
+public:
+    virtual ~IRuntimeTask() = default;
+    virtual void poll(uint64_t now_us) = 0;
+};
 
 class IScheduler {
 public:

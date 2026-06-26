@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "async_event_loop/task.hpp"
+#include "async_event_loop/scheduler.hpp"
 #include "async_event_loop/tcp.hpp"
 #include "async_event_loop_arduino/arduino_loop.hpp"
 

@@ -2,7 +2,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "async_event_loop/byte_stream.hpp"
+#include "async_event_loop/event_loop.hpp"
 
 namespace async_event_loop_test {
 

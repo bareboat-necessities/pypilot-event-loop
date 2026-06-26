@@ -1,8 +1,7 @@
 #pragma once
 
 #include "async_event_loop/status.hpp"
-#include "async_event_loop/byte_stream.hpp"
-#include "async_event_loop/datagram_stream.hpp"
+#include "async_event_loop/event_loop.hpp"
 #include "async_event_loop/udp.hpp"
 #include "async_event_loop/protocol_reader.hpp"
 #include "async_event_loop/tcp.hpp"
@@ -13,4 +12,3 @@
 #include "async_event_loop/native_udp.hpp"
 #include "async_event_loop/native_tcp.hpp"
 #include "async_event_loop/native_pin_io.hpp"
-#include "async_event_loop/event_loop.hpp"

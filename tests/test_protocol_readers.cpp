@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cstring>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 #include "support/memory_stream.hpp"
 
 static size_t one_byte_length_header(const uint8_t* header, size_t header_size) {
@@ -10,8 +10,8 @@ static size_t one_byte_length_header(const uint8_t* header, size_t header_size) 
 }
 
 int main() {
-    using namespace pypilot_event_loop;
-    using pypilot_event_loop_test::MemoryByteStream;
+    using namespace async_event_loop;
+    using async_event_loop_test::MemoryByteStream;
 
     {
         MemoryByteStream<64> stream;

@@ -2,9 +2,9 @@
 #include <Arduino.h>
 #endif
 
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-using namespace pypilot_event_loop;
+using namespace async_event_loop;
 
 template<size_t Capacity>
 class LineInputStream final : public IByteStream {

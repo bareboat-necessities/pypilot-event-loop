@@ -1,8 +1,8 @@
 #include <cassert>
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
 int main() {
-    using namespace pypilot_event_loop;
+    using namespace async_event_loop;
 
     PeriodicTimer periodic(100);
     assert(periodic.ready(0));

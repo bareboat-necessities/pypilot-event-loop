@@ -1,6 +1,6 @@
 #if defined(ARDUINO)
-#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
-#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
+#define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
+#define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
 #include <Arduino.h>
 #include <WiFi.h>
 #ifndef PYPILOT_WIFI_SSID
@@ -55,9 +55,9 @@
 #endif
 
 #include <string.h>
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-using namespace pypilot_event_loop;
+using namespace async_event_loop;
 
 EventLoop<48> event_loop;
 NativeTcpServer tcp_server(event_loop.scheduler());

@@ -1,18 +1,18 @@
 #pragma once
 
 #include <stddef.h>
-#include "pypilot_event_loop/clock.hpp"
-#include "pypilot_event_loop/scheduler.hpp"
+#include "async_event_loop/clock.hpp"
+#include "async_event_loop/scheduler.hpp"
 
-namespace pypilot_event_loop_test {
+namespace async_event_loop_test {
 
-class TestScheduler final : public pypilot_event_loop::IScheduler {
+class TestScheduler final : public async_event_loop::IScheduler {
 public:
-    explicit TestScheduler(pypilot_event_loop::IClock& clock) : clock_(clock) {}
+    explicit TestScheduler(async_event_loop::IClock& clock) : clock_(clock) {}
 
     bool valid() const override { return true; }
 
-    bool add_periodic(pypilot_event_loop::IRuntimeTask& task, uint64_t period_us) override {
+    bool add_periodic(async_event_loop::IRuntimeTask& task, uint64_t period_us) override {
         compact_inactive();
         if (period_us == 0 || count_ >= MaxTasks) {
             return false;
@@ -27,7 +27,7 @@ public:
         return true;
     }
 
-    bool add_one_shot(pypilot_event_loop::IRuntimeTask& task, uint64_t due_us) override {
+    bool add_one_shot(async_event_loop::IRuntimeTask& task, uint64_t due_us) override {
         compact_inactive();
         if (count_ >= MaxTasks) {
             return false;
@@ -42,7 +42,7 @@ public:
         return true;
     }
 
-    bool remove(pypilot_event_loop::IRuntimeTask& task) override {
+    bool remove(async_event_loop::IRuntimeTask& task) override {
         bool removed = false;
         for (size_t i = 0; i < count_; ++i) {
             if (tasks_[i].task == &task) {
@@ -95,7 +95,7 @@ private:
     static constexpr size_t MaxTasks = 64;
 
     struct TaskSlot {
-        pypilot_event_loop::IRuntimeTask* task = nullptr;
+        async_event_loop::IRuntimeTask* task = nullptr;
         uint64_t period_us = 0;
         uint64_t next_due_us = 0;
         bool periodic = false;
@@ -115,11 +115,11 @@ private:
         }
     }
 
-    pypilot_event_loop::IClock& clock_;
+    async_event_loop::IClock& clock_;
     TaskSlot tasks_[MaxTasks]{};
     size_t count_ = 0;
     bool exit_requested_ = false;
     bool running_ = false;
 };
 
-} // namespace pypilot_event_loop_test
+} // namespace async_event_loop_test

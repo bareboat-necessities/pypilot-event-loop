@@ -1,12 +1,12 @@
 #include <cassert>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
 int main() {
-    pypilot_event_loop::EventLoop<1> event_loop;
+    async_event_loop::EventLoop<1> event_loop;
 
     int first = 0;
-    const pypilot_event_loop::EventHandle first_handle = event_loop.on_repeat(1000, [&]() {
+    const async_event_loop::EventHandle first_handle = event_loop.on_repeat(1000, [&]() {
         ++first;
     });
     assert(first_handle.assigned());
@@ -15,7 +15,7 @@ int main() {
     assert(!event_loop.valid(first_handle));
 
     int second = 0;
-    const pypilot_event_loop::EventHandle second_handle = event_loop.on_delay(0, [&]() {
+    const async_event_loop::EventHandle second_handle = event_loop.on_delay(0, [&]() {
         ++second;
     });
     assert(second_handle.assigned());
@@ -29,7 +29,7 @@ int main() {
     assert(!event_loop.valid(second_handle));
 
     int third = 0;
-    const pypilot_event_loop::EventHandle third_handle = event_loop.on_delay(0, [&]() {
+    const async_event_loop::EventHandle third_handle = event_loop.on_delay(0, [&]() {
         ++third;
     });
     assert(third_handle.assigned());

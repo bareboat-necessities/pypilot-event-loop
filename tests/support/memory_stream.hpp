@@ -2,12 +2,12 @@
 
 #include <stddef.h>
 #include <stdint.h>
-#include "pypilot_event_loop/byte_stream.hpp"
+#include "async_event_loop/byte_stream.hpp"
 
-namespace pypilot_event_loop_test {
+namespace async_event_loop_test {
 
 template<size_t Capacity>
-class MemoryByteStream final : public pypilot_event_loop::IByteStream {
+class MemoryByteStream final : public async_event_loop::IByteStream {
 public:
     int read(uint8_t* dst, size_t max_len) override {
         if (!dst || max_len == 0) {
@@ -48,4 +48,4 @@ private:
     size_t count_ = 0;
 };
 
-} // namespace pypilot_event_loop_test
+} // namespace async_event_loop_test

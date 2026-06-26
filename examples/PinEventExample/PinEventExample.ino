@@ -3,9 +3,9 @@
 #endif
 
 #include <stddef.h>
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-using namespace pypilot_event_loop;
+using namespace async_event_loop;
 
 EventLoop<> event_loop;
 uint32_t pin_events = 0;

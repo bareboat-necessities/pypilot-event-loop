@@ -16,10 +16,10 @@ void loop() {}
 #include <iostream>
 #include <string.h>
 
-#include <pypilot_event_loop.hpp>
-#include <pypilot_event_loop_linux/linux_fifo_byte_stream.hpp>
+#include <async_event_loop.hpp>
+#include <async_event_loop_linux/linux_fifo_byte_stream.hpp>
 
-using namespace pypilot_event_loop;
+using namespace async_event_loop;
 
 EventLoop<> event_loop;
 uint32_t tx_count = 0;

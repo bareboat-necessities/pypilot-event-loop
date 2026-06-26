@@ -5,27 +5,27 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
-struct OutputHandler final : public pypilot_event_loop::ITcpServerHandler {
-    pypilot_event_loop::ITcpConnection* connection = nullptr;
+struct OutputHandler final : public async_event_loop::ITcpServerHandler {
+    async_event_loop::ITcpConnection* connection = nullptr;
     int accepted = 0;
     int write_ready = 0;
     int closed = 0;
 
-    void on_accept(pypilot_event_loop::ITcpConnection& c,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_accept(async_event_loop::ITcpConnection& c,
+                   const async_event_loop::TcpPeerInfo& peer) override {
         (void)peer;
         connection = &c;
         ++accepted;
     }
 
-    void on_write_ready(pypilot_event_loop::ITcpConnection& c) override {
+    void on_write_ready(async_event_loop::ITcpConnection& c) override {
         (void)c;
         ++write_ready;
     }
 
-    void on_close(pypilot_event_loop::ITcpConnection& c) override {
+    void on_close(async_event_loop::ITcpConnection& c) override {
         (void)c;
         ++closed;
     }
@@ -45,10 +45,10 @@ static int connect_client(uint16_t port) {
 }
 
 int main() {
-    pypilot_event_loop::EventLoop<> event_loop;
+    async_event_loop::EventLoop<> event_loop;
     OutputHandler handler;
-    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
-    pypilot_event_loop::TcpListenOptions options;
+    async_event_loop::NativeTcpServer server(event_loop.scheduler());
+    async_event_loop::TcpListenOptions options;
     options.host = "127.0.0.1";
     options.port = 0;
     options.reuse_address = true;

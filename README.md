@@ -20,7 +20,7 @@ The public API exposes:
 - TCP listener/connection interfaces
 - TCP client connection interfaces
 - Linux UDP/TCP backends using libevent fd readiness and native sockets
-- Arduino UDP/TCP backends using WiFi only, gated by `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` or `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP`
+- Arduino UDP/TCP backends using WiFi only, gated by `ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` or `ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP`
 - Linux named FIFO byte streams for runtime/backend code
 - native serial stream aliases for Arduino `Serial` and Linux tty devices
 - event handles for enable/disable/remove with slot reclamation
@@ -45,7 +45,7 @@ Portable examples use one optional Arduino include block at the top, then includ
 #include <Arduino.h>
 #endif
 
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 ```
 
 Small throwaway streams or sources used only to drive an example stay local to that example file. Shared fixtures belong in `tests/support`, not in public headers and not in `src`.
@@ -53,11 +53,11 @@ Small throwaway streams or sources used only to drive an example stay local to t
 ## Common callback API
 
 ```cpp
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-pypilot_event_loop::EventLoop<> event_loop;
+async_event_loop::EventLoop<> event_loop;
 
-pypilot_event_loop::EventHandle repeat = event_loop.on_repeat(1000, []() {
+async_event_loop::EventHandle repeat = event_loop.on_repeat(1000, []() {
     // runs once per second
 });
 
@@ -75,7 +75,7 @@ event_loop.on_delay(500, []() {
 Use `on_bytes_ready()` for raw byte and datagram input. Protocol examples should usually feed a protocol reader rather than manually parse bytes.
 
 ```cpp
-pypilot_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() {
+async_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() {
     uint8_t buf[128];
     const int n = stream.read(buf, sizeof(buf));
     if (n > 0) {
@@ -89,7 +89,7 @@ pypilot_event_loop::EventHandle input = event_loop.on_bytes_ready(stream, [&]() 
 Line-delimited protocol:
 
 ```cpp
-pypilot_event_loop::LineProtocolReader<128> lines(stream, {}, [](pypilot_event_loop::LineView line) {
+async_event_loop::LineProtocolReader<128> lines(stream, {}, [](async_event_loop::LineView line) {
     // complete line, with optional CR stripping
 });
 
@@ -101,10 +101,10 @@ event_loop.on_bytes_ready(stream, [&]() {
 Header+payload protocol:
 
 ```cpp
-pypilot_event_loop::HeaderPayloadProtocolReader<512> framed(
+async_event_loop::HeaderPayloadProtocolReader<512> framed(
     stream,
-    pypilot_event_loop::HeaderPayloadProtocolOptions{4, 256, payload_size_from_header},
-    [](pypilot_event_loop::FrameView frame) {
+    async_event_loop::HeaderPayloadProtocolOptions{4, 256, payload_size_from_header},
+    [](async_event_loop::FrameView frame) {
         // complete header + payload
     });
 ```
@@ -123,11 +123,11 @@ Send newline-delimited messages. The example echoes each received line as `line:
 
 ## UDP datagram API
 
-Linux exposes `NativeUdpDatagramStream` using IPv4 UDP sockets. Arduino exposes the same alias only when `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` is defined before including `pypilot_event_loop.hpp`. The Arduino UDP backend is WiFi-only and uses `WiFiUDP`.
+Linux exposes `NativeUdpDatagramStream` using IPv4 UDP sockets. Arduino exposes the same alias only when `ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP` is defined before including `async_event_loop.hpp`. The Arduino UDP backend is WiFi-only and uses `WiFiUDP`.
 
 ```cpp
-#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
-#include <pypilot_event_loop.hpp>
+#define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
+#include <async_event_loop.hpp>
 ```
 
 Linux broadcast sender example:
@@ -144,11 +144,11 @@ Linux receiver example:
 
 ## TCP server and client API
 
-Linux exposes `NativeTcpServer` and `NativeTcpClient`. Arduino exposes the same aliases only when `PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP` is defined before including `pypilot_event_loop.hpp`. The Arduino TCP backend is WiFi-only and uses `WiFiServer`/`WiFiClient`; it does not pull in Ethernet or non-WiFi transports.
+Linux exposes `NativeTcpServer` and `NativeTcpClient`. Arduino exposes the same aliases only when `ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP` is defined before including `async_event_loop.hpp`. The Arduino TCP backend is WiFi-only and uses `WiFiServer`/`WiFiClient`; it does not pull in Ethernet or non-WiFi transports.
 
 ```cpp
-#define PYPILOT_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
-#include <pypilot_event_loop.hpp>
+#define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
+#include <async_event_loop.hpp>
 ```
 
 Server handlers implement `ITcpServerHandler`; client handlers implement `ITcpClientHandler`. Both use `ITcpConnection` for `read_line()`, `read_exact()`, `write()`, and close handling.
@@ -165,7 +165,7 @@ By default, the FIFO is created if missing and opened `O_RDWR | O_NONBLOCK`. Thi
 
 ## Pin I/O API
 
-Portable code uses `IDigitalInputPin`, `IDigitalOutputPin`, `IAnalogInputPin`, and `IAnalogOutputPin` or the native aliases from `pypilot_event_loop.hpp`.
+Portable code uses `IDigitalInputPin`, `IDigitalOutputPin`, `IAnalogInputPin`, and `IAnalogOutputPin` or the native aliases from `async_event_loop.hpp`.
 
 Linux defaults to file-backed pin I/O:
 
@@ -179,11 +179,11 @@ These file-backed paths are suitable for prepared sysfs GPIO value files, IIO ra
 For real claimed Linux GPIO lines, include the gpiod backend and opt in before including the umbrella header:
 
 ```cpp
-#define PYPILOT_EVENT_LOOP_ENABLE_LINUX_GPIOD_PIN_IO
-#include <pypilot_event_loop.hpp>
+#define ASYNC_EVENT_LOOP_ENABLE_LINUX_GPIOD_PIN_IO
+#include <async_event_loop.hpp>
 
-pypilot_event_loop::NativeDigitalInputPin input("gpiochip0", 17);
-pypilot_event_loop::NativeDigitalOutputPin output("gpiochip0", 27, false);
+async_event_loop::NativeDigitalInputPin input("gpiochip0", 17);
+async_event_loop::NativeDigitalOutputPin output("gpiochip0", 27, false);
 ```
 
 The gpiod backend claims and configures digital lines through libgpiod. Analog input/output remains file-backed because Linux analog/PWM access is normally exposed through IIO/PWM/sysfs-style files or board-specific drivers.
@@ -273,7 +273,7 @@ cmake --build build --parallel
 ctest --test-dir build --output-on-failure
 ```
 
-`libgpiod-dev` is optional. Install it when building code that defines `PYPILOT_EVENT_LOOP_ENABLE_LINUX_GPIOD_PIN_IO` or uses gpiod pin-event sources.
+`libgpiod-dev` is optional. Install it when building code that defines `ASYNC_EVENT_LOOP_ENABLE_LINUX_GPIOD_PIN_IO` or uses gpiod pin-event sources.
 
 ## Arduino compile smoke tests
 

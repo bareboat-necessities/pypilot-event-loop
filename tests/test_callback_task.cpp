@@ -1,8 +1,8 @@
 #include <cassert>
-#include "pypilot_event_loop/callback_task.hpp"
+#include "async_event_loop/callback_task.hpp"
 
 int main() {
-    using namespace pypilot_event_loop;
+    using namespace async_event_loop;
 
     int count = 0;
     CallbackTask<32> task;

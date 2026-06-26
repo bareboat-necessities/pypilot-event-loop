@@ -1,31 +1,31 @@
 #include <cassert>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
-struct ClosingServerHandler final : public pypilot_event_loop::ITcpServerHandler {
+struct ClosingServerHandler final : public async_event_loop::ITcpServerHandler {
     int accepted = 0;
 
-    void on_accept(pypilot_event_loop::ITcpConnection& connection,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_accept(async_event_loop::ITcpConnection& connection,
+                   const async_event_loop::TcpPeerInfo& peer) override {
         (void)peer;
         ++accepted;
         connection.close();
     }
 };
 
-struct ClientHandler final : public pypilot_event_loop::ITcpClientHandler {
+struct ClientHandler final : public async_event_loop::ITcpClientHandler {
     int connected = 0;
     int closed = 0;
     int errors = 0;
 
-    void on_connect(pypilot_event_loop::ITcpConnection& connection,
-                    const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_connect(async_event_loop::ITcpConnection& connection,
+                    const async_event_loop::TcpPeerInfo& peer) override {
         (void)connection;
         (void)peer;
         ++connected;
     }
 
-    void on_close(pypilot_event_loop::ITcpConnection& connection) override {
+    void on_close(async_event_loop::ITcpConnection& connection) override {
         (void)connection;
         ++closed;
     }
@@ -37,18 +37,18 @@ struct ClientHandler final : public pypilot_event_loop::ITcpClientHandler {
 };
 
 int main() {
-    pypilot_event_loop::EventLoop<> event_loop;
+    async_event_loop::EventLoop<> event_loop;
     ClosingServerHandler server_handler;
     ClientHandler client_handler;
 
-    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
-    pypilot_event_loop::TcpListenOptions listen_options;
+    async_event_loop::NativeTcpServer server(event_loop.scheduler());
+    async_event_loop::TcpListenOptions listen_options;
     listen_options.host = "127.0.0.1";
     listen_options.port = 0;
     assert(server.listen(listen_options, server_handler));
 
-    pypilot_event_loop::NativeTcpClient client(event_loop.scheduler());
-    pypilot_event_loop::TcpConnectOptions connect_options;
+    async_event_loop::NativeTcpClient client(event_loop.scheduler());
+    async_event_loop::TcpConnectOptions connect_options;
     connect_options.host = "localhost";
     connect_options.port = server.port();
     assert(client.connect(connect_options, client_handler));

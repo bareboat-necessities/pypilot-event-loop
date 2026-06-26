@@ -1,10 +1,10 @@
 #include <cassert>
 #include <stdint.h>
 
-#include "pypilot_event_loop/micros32_extender.hpp"
+#include "async_event_loop/micros32_extender.hpp"
 
 int main() {
-    pypilot_event_loop::Micros32Extender clock;
+    async_event_loop::Micros32Extender clock;
 
     assert(clock.update(100u) == 100ULL);
     assert(clock.update(150u) == 150ULL);

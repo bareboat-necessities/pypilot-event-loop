@@ -2,16 +2,16 @@
 
 #include <stddef.h>
 
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-namespace pypilot_event_loop_examples {
+namespace async_event_loop_examples {
 
 template<size_t Capacity>
-class ExamplePinEventSource final : public pypilot_event_loop::IPinEventSource {
+class ExamplePinEventSource final : public async_event_loop::IPinEventSource {
 public:
     bool valid() const override { return true; }
 
-    bool push(pypilot_event_loop::PinEvent event) {
+    bool push(async_event_loop::PinEvent event) {
         if (count_ >= Capacity) {
             return false;
         }
@@ -22,7 +22,7 @@ public:
         return true;
     }
 
-    bool read_event(pypilot_event_loop::PinEvent& event) override {
+    bool read_event(async_event_loop::PinEvent& event) override {
         if (count_ == 0) {
             return false;
         }
@@ -33,11 +33,11 @@ public:
     }
 
 private:
-    pypilot_event_loop::PinEvent events_[Capacity]{};
+    async_event_loop::PinEvent events_[Capacity]{};
     size_t head_ = 0;
     size_t tail_ = 0;
     size_t count_ = 0;
     uint32_t sequence_ = 0;
 };
 
-} // namespace pypilot_event_loop_examples
+} // namespace async_event_loop_examples

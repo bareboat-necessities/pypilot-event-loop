@@ -5,24 +5,24 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
-struct TimeoutHandler final : public pypilot_event_loop::ITcpServerHandler {
-    pypilot_event_loop::ITcpConnection* connection = nullptr;
+struct TimeoutHandler final : public async_event_loop::ITcpServerHandler {
+    async_event_loop::ITcpConnection* connection = nullptr;
     int accepted = 0;
     int data = 0;
     int errors = 0;
     int last_error = 0;
 
-    void on_accept(pypilot_event_loop::ITcpConnection& c,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_accept(async_event_loop::ITcpConnection& c,
+                   const async_event_loop::TcpPeerInfo& peer) override {
         (void)peer;
         connection = &c;
         ++accepted;
-        pypilot_event_loop::TcpTimeoutOptions timeouts;
+        async_event_loop::TcpTimeoutOptions timeouts;
         timeouts.read_timeout_ms = 10;
         assert(c.set_timeouts(timeouts));
-        pypilot_event_loop::TcpWatermarkOptions watermarks;
+        async_event_loop::TcpWatermarkOptions watermarks;
         watermarks.read_low = 2;
         watermarks.read_high = 0;
         watermarks.write_low = 0;
@@ -30,12 +30,12 @@ struct TimeoutHandler final : public pypilot_event_loop::ITcpServerHandler {
         assert(c.set_watermarks(watermarks));
     }
 
-    void on_data(pypilot_event_loop::ITcpConnection& c) override {
+    void on_data(async_event_loop::ITcpConnection& c) override {
         (void)c;
         ++data;
     }
 
-    void on_error(pypilot_event_loop::ITcpConnection& c, int error_code) override {
+    void on_error(async_event_loop::ITcpConnection& c, int error_code) override {
         (void)c;
         ++errors;
         last_error = error_code;
@@ -56,10 +56,10 @@ static int connect_client(uint16_t port) {
 }
 
 int main() {
-    pypilot_event_loop::EventLoop<> event_loop;
+    async_event_loop::EventLoop<> event_loop;
     TimeoutHandler handler;
-    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
-    pypilot_event_loop::TcpListenOptions options;
+    async_event_loop::NativeTcpServer server(event_loop.scheduler());
+    async_event_loop::TcpListenOptions options;
     options.host = "127.0.0.1";
     options.port = 0;
     assert(server.listen(options, handler));
@@ -88,7 +88,7 @@ int main() {
     server.close();
 
     TimeoutHandler timeout_handler;
-    pypilot_event_loop::NativeTcpServer timeout_server(event_loop.scheduler());
+    async_event_loop::NativeTcpServer timeout_server(event_loop.scheduler());
     assert(timeout_server.listen(options, timeout_handler));
     int timeout_client = connect_client(timeout_server.port());
     for (int i = 0; i < 100 && timeout_handler.accepted == 0; ++i) {

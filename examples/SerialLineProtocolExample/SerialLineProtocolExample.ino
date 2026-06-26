@@ -5,9 +5,9 @@
 #include <iostream>
 #endif
 
-#include <pypilot_event_loop.hpp>
+#include <async_event_loop.hpp>
 
-using namespace pypilot_event_loop;
+using namespace async_event_loop;
 
 EventLoop<> event_loop;
 

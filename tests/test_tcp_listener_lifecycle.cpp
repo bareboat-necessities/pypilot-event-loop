@@ -3,14 +3,14 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
-struct LifecycleHandler final : public pypilot_event_loop::ITcpServerHandler {
+struct LifecycleHandler final : public async_event_loop::ITcpServerHandler {
     int accepted = 0;
     int listener_errors = 0;
 
-    void on_accept(pypilot_event_loop::ITcpConnection& connection,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_accept(async_event_loop::ITcpConnection& connection,
+                   const async_event_loop::TcpPeerInfo& peer) override {
         (void)connection;
         (void)peer;
         ++accepted;
@@ -46,17 +46,17 @@ static bool can_connect(uint16_t port) {
 }
 
 int main() {
-    pypilot_event_loop::EventLoop<> event_loop;
+    async_event_loop::EventLoop<> event_loop;
     LifecycleHandler handler;
-    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
+    async_event_loop::NativeTcpServer server(event_loop.scheduler());
 
-    pypilot_event_loop::TcpListenOptions bad_options;
+    async_event_loop::TcpListenOptions bad_options;
     bad_options.host = "not-an-ip-address";
     bad_options.port = 0;
     assert(!server.listen(bad_options, handler));
     assert(!server.valid());
 
-    pypilot_event_loop::TcpListenOptions options;
+    async_event_loop::TcpListenOptions options;
     options.host = "127.0.0.1";
     options.port = 0;
     options.reuse_address = true;

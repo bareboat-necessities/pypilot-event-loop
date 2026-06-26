@@ -4,21 +4,21 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
-struct FixedHeaderHandler final : public pypilot_event_loop::ITcpServerHandler {
+struct FixedHeaderHandler final : public async_event_loop::ITcpServerHandler {
     int accepted = 0;
     int frames = 0;
     int closed = 0;
 
-    void on_accept(pypilot_event_loop::ITcpConnection& connection,
-                   const pypilot_event_loop::TcpPeerInfo& peer) override {
+    void on_accept(async_event_loop::ITcpConnection& connection,
+                   const async_event_loop::TcpPeerInfo& peer) override {
         (void)connection;
         (void)peer;
         ++accepted;
     }
 
-    void on_data(pypilot_event_loop::ITcpConnection& connection) override {
+    void on_data(async_event_loop::ITcpConnection& connection) override {
         while (connection.input_size() >= 1) {
             uint8_t header = 0;
             if (!connection.peek(&header, 1)) {
@@ -38,7 +38,7 @@ struct FixedHeaderHandler final : public pypilot_event_loop::ITcpServerHandler {
         }
     }
 
-    void on_close(pypilot_event_loop::ITcpConnection& connection) override {
+    void on_close(async_event_loop::ITcpConnection& connection) override {
         (void)connection;
         ++closed;
     }
@@ -58,11 +58,11 @@ static int connect_client(uint16_t port) {
 }
 
 int main() {
-    pypilot_event_loop::EventLoop<> event_loop;
+    async_event_loop::EventLoop<> event_loop;
     FixedHeaderHandler handler;
-    pypilot_event_loop::NativeTcpServer server(event_loop.scheduler());
+    async_event_loop::NativeTcpServer server(event_loop.scheduler());
 
-    pypilot_event_loop::TcpListenOptions options;
+    async_event_loop::TcpListenOptions options;
     options.host = "127.0.0.1";
     options.port = 0;
     assert(server.listen(options, handler));

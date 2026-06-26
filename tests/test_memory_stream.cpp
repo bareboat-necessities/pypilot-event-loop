@@ -2,7 +2,7 @@
 #include "support/memory_stream.hpp"
 
 int main() {
-    using pypilot_event_loop_test::MemoryByteStream;
+    using async_event_loop_test::MemoryByteStream;
 
     MemoryByteStream<4> stream;
     assert(stream.valid());

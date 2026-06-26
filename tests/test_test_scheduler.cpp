@@ -1,9 +1,9 @@
 #include <cassert>
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 #include "support/test_clock.hpp"
 #include "support/test_scheduler.hpp"
 
-class CountTask final : public pypilot_event_loop::IRuntimeTask {
+class CountTask final : public async_event_loop::IRuntimeTask {
 public:
     void poll(uint64_t now_us) override {
         last_us = now_us;
@@ -15,8 +15,8 @@ public:
 };
 
 int main() {
-    using pypilot_event_loop_test::TestClock;
-    using pypilot_event_loop_test::TestScheduler;
+    using async_event_loop_test::TestClock;
+    using async_event_loop_test::TestScheduler;
 
     TestClock clock;
     TestScheduler loop(clock);

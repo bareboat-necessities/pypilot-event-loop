@@ -2,11 +2,11 @@
 #include <cstring>
 #include <unistd.h>
 
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
 int main() {
-    pypilot_event_loop::NativeUdpDatagramStream a;
-    pypilot_event_loop::NativeUdpDatagramStream b;
+    async_event_loop::NativeUdpDatagramStream a;
+    async_event_loop::NativeUdpDatagramStream b;
 
     assert(a.bind(0));
     assert(b.bind(0));
@@ -18,7 +18,7 @@ int main() {
     assert(a.bind(23001));
     assert(b.bind(23002));
 
-    pypilot_event_loop::UdpEndpoint endpoint_b{};
+    async_event_loop::UdpEndpoint endpoint_b{};
     std::strncpy(endpoint_b.host, "127.0.0.1", sizeof(endpoint_b.host) - 1);
     endpoint_b.port = 23002;
 
@@ -26,7 +26,7 @@ int main() {
     assert(a.send_to(payload, sizeof(payload), endpoint_b) == static_cast<int>(sizeof(payload)));
 
     uint8_t rx[16]{};
-    pypilot_event_loop::UdpEndpoint source{};
+    async_event_loop::UdpEndpoint source{};
     int n = 0;
     for (int i = 0; i < 100; ++i) {
         n = b.recv_from(rx, sizeof(rx), &source);
@@ -43,7 +43,7 @@ int main() {
     const uint8_t reply[] = {'o', 'k'};
     assert(b.send(reply, sizeof(reply)) == static_cast<int>(sizeof(reply)));
 
-    pypilot_event_loop::UdpEndpoint reply_source{};
+    async_event_loop::UdpEndpoint reply_source{};
     n = 0;
     for (int i = 0; i < 100; ++i) {
         n = a.recv_from(rx, sizeof(rx), &reply_source);

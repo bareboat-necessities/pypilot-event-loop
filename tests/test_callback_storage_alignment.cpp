@@ -1,4 +1,4 @@
-#include "pypilot_event_loop.hpp"
+#include "async_event_loop.hpp"
 
 #include <cassert>
 
@@ -10,7 +10,7 @@ struct AlignedCallable {
 
 int main() {
     int calls = 0;
-    pypilot_event_loop::CallbackTask<64> task;
+    async_event_loop::CallbackTask<64> task;
     assert(task.set(AlignedCallable{0, &calls}));
     task.poll(0);
     assert(calls == 1);

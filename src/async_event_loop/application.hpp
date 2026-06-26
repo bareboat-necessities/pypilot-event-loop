@@ -8,7 +8,7 @@
 #include "datagram_stream.hpp"
 #include "event_handle.hpp"
 #include "native.hpp"
-#include "pin_event.hpp"
+#include "pin_io.hpp"
 
 #ifndef ASYNC_EVENT_LOOP_DEFAULT_MAX_CALLBACKS
 #if defined(ARDUINO)

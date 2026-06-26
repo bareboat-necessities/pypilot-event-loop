@@ -1,5 +1,5 @@
 #include <cassert>
-#include "async_event_loop/callback_task.hpp"
+#include "async_event_loop/scheduler.hpp"
 
 int main() {
     using namespace async_event_loop;

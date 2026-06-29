@@ -21,6 +21,18 @@
 
 namespace async_event_loop {
 
+/**
+ * Portable byte-oriented stream interface.
+ *
+ * This is the single readiness interface used by EventLoop. Ordinary streams
+ * and datagram transports both implement it. Datagram implementations return
+ * true from is_datagram(); their read/write operations receive or send one
+ * datagram at a time according to the concrete transport's rules.
+ *
+ * Linux fd-backed implementations return a non-negative native_fd() so the
+ * native scheduler can use fd readiness. Cooperative backends return -1 and
+ * are polled from tick()/run_once().
+ */
 class IByteStream {
 public:
     virtual ~IByteStream() = default;
@@ -36,6 +48,12 @@ public:
     virtual int native_fd() const { return -1; }
 };
 
+/**
+ * Stable handle for an event-loop callback slot.
+ *
+ * The generation field prevents stale handles from controlling a later callback
+ * after a removed slot has been reused.
+ */
 struct EventHandle {
     static constexpr uint16_t invalid_slot = 0xffffu;
 
@@ -50,6 +68,14 @@ struct EventHandle {
     explicit operator bool() const { return assigned(); }
 };
 
+/**
+ * Application-facing event-loop facade.
+ *
+ * EventLoop owns the native clock and scheduler selected by native.hpp. On
+ * Linux this is the libevent scheduler. On Arduino this is the cooperative
+ * scheduler. Callback storage is fixed-size to avoid std::function and heap
+ * allocation in small targets.
+ */
 template<size_t MaxCallbacks = ASYNC_EVENT_LOOP_DEFAULT_MAX_CALLBACKS,
          size_t CallbackStorageSize = ASYNC_EVENT_LOOP_DEFAULT_CALLBACK_STORAGE_SIZE>
 class EventLoop {
@@ -58,10 +84,13 @@ public:
         static_assert(MaxCallbacks <= 0xfffeu, "EventLoop supports at most 65534 callback slots");
     }
 
+    /** Default cooperative readiness check period for streams or pins without fd readiness. */
     static constexpr uint64_t default_readiness_poll_us = 1000ULL;
 
+    /** Return true when the selected platform backend initialized correctly. */
     bool valid() const { return scheduler_.valid(); }
 
+    /** Return true when an event handle still names an active slot in this loop. */
     bool valid(EventHandle handle) const {
         return handle.assigned() &&
                handle.slot < MaxCallbacks &&
@@ -70,6 +99,7 @@ public:
                callback_generations_[handle.slot] == handle.generation;
     }
 
+    /** Enable a previously registered callback slot. */
     bool enable(EventHandle handle) {
         if (!valid(handle)) {
             return false;
@@ -78,6 +108,7 @@ public:
         return true;
     }
 
+    /** Disable a callback slot without destroying its stored callable. */
     bool disable(EventHandle handle) {
         if (!valid(handle)) {
             return false;
@@ -86,6 +117,7 @@ public:
         return true;
     }
 
+    /** Remove a callback slot, unschedule its backend task, and make the slot reusable. */
     bool remove(EventHandle handle) {
         if (!valid(handle)) {
             return false;
@@ -97,14 +129,17 @@ public:
         return true;
     }
 
+    /** Register a runtime task that repeats every period_us microseconds. */
     bool add_periodic(IRuntimeTask& task, uint64_t period_us) {
         return scheduler_.add_periodic(task, period_us);
     }
 
+    /** Register a runtime task that runs once at absolute due_us. */
     bool add_one_shot(IRuntimeTask& task, uint64_t due_us) {
         return scheduler_.add_one_shot(task, due_us);
     }
 
+    /** Register a callable that repeats every period_us microseconds. */
     template<typename Callable>
     EventHandle on_repeat_us(uint64_t period_us, Callable callable) {
         const EventHandle handle = allocate_callback(callable);
@@ -118,6 +153,7 @@ public:
         return handle;
     }
 
+    /** Register a callable that runs once after delay_us microseconds. */
     template<typename Callable>
     EventHandle on_delay_us(uint64_t delay_us, Callable callable) {
         for (size_t i = 0; i < MaxCallbacks; ++i) {
@@ -139,16 +175,25 @@ public:
         return EventHandle{};
     }
 
+    /** Register a callable that repeats every interval_ms milliseconds. */
     template<typename Callable>
     EventHandle on_repeat(uint32_t interval_ms, Callable callable) {
         return on_repeat_us(static_cast<uint64_t>(interval_ms) * 1000ULL, callable);
     }
 
+    /** Register a callable that runs once after delay_ms milliseconds. */
     template<typename Callable>
     EventHandle on_delay(uint32_t delay_ms, Callable callable) {
         return on_delay_us(static_cast<uint64_t>(delay_ms) * 1000ULL, callable);
     }
 
+    /**
+     * Register a stream data-ready callback.
+     *
+     * The same path handles normal byte streams and datagram streams. The stream
+     * object is captured by reference and must outlive the returned EventHandle
+     * or be removed before the stream is destroyed.
+     */
     template<typename Callable>
     EventHandle on_bytes_ready(IByteStream& stream,
                                Callable callable,
@@ -168,6 +213,12 @@ public:
         return handle;
     }
 
+    /**
+     * Register a GPIO/pin event source callback.
+     *
+     * Linux fd-backed sources use native fd readiness. Cooperative sources are
+     * polled from tick()/run_once(). The callable receives each PinEvent.
+     */
     template<typename Callable>
     EventHandle on_pin_event(IPinEventSource& source,
                              Callable callable,
@@ -188,12 +239,22 @@ public:
         return handle;
     }
 
+    /** Poll one loop iteration. This is the method normally called by Arduino loop(). */
     void tick() { scheduler_.run_once(); }
+
+    /** Poll one loop iteration. Same as tick(), but clearer in Linux code. */
     void run_once() { scheduler_.run_once(); }
+
+    /** Run until request_exit() is called. Normal Linux daemon/app entry point. */
     void run_forever() { scheduler_.run_forever(); }
+
+    /** Request exit from run_forever(). */
     void request_exit() { scheduler_.request_exit(); }
 
+    /** Access the native clock for advanced integrations/tests. */
     NativeClock& clock() { return clock_; }
+
+    /** Access the native scheduler for fd readiness or lower-level integrations. */
     NativeSchedulerFor<MaxCallbacks>& scheduler() { return scheduler_; }
 
 private:

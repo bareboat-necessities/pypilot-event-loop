@@ -77,6 +77,7 @@ public:
     }
 
     ITcpConnection* connection() { return connection_; }
+    const ITcpConnection* connection() const { return connection_; }
 
 private:
     ITcpConnection* connection_ = nullptr;

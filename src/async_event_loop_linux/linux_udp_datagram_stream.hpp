@@ -66,7 +66,7 @@ public:
         return true;
     }
 
-    int send(const uint8_t* src, size_t len) override {
+    int write(const uint8_t* src, size_t len) override {
         if (!has_remote_) {
             return 0;
         }
@@ -83,7 +83,7 @@ public:
         return send_to_sockaddr(src, len, sin);
     }
 
-    int recv(uint8_t* dst, size_t max_len) override {
+    int read(uint8_t* dst, size_t max_len) override {
         return recv_from(dst, max_len, nullptr);
     }
 

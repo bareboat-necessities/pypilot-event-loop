@@ -43,18 +43,6 @@ static void print_text(const char* text) {
 #endif
 }
 
-static void print_line_view(LineView line) {
-#if defined(ARDUINO)
-    Serial.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
-#else
-    std::cout.write(line.data, static_cast<std::streamsize>(line.size));
-#endif
-}
-
-static void tcp_write_text(ITcpConnection& connection, const char* text) {
-    connection.write(reinterpret_cast<const uint8_t*>(text), strlen(text));
-}
-
 static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
     char digits[10];
     size_t n = 0;
@@ -68,71 +56,40 @@ static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
     }
 }
 
-static void tcp_write_newline(ITcpConnection& connection) {
-    const uint8_t newline = '\n';
-    connection.write(&newline, 1);
-}
-
-static void tcp_write_line(ITcpConnection& connection, const char* text) {
-    tcp_write_text(connection, text);
-    tcp_write_newline(connection);
-}
-
-class TcpConnectionByteStream final : public IByteStream {
-public:
-    void bind(ITcpConnection* connection) { connection_ = connection; }
-    void unbind() { connection_ = nullptr; }
-
-    int read(uint8_t* dst, size_t max_len) override {
-        return connection_ ? connection_->read(dst, max_len) : 0;
+struct LineCallbacks final : public ITcpLineClientHandler {
+    void on_connect(ITcpConnection& connection, const TcpPeerInfo& peer) override {
+        (void)peer;
+        print_text("connected\n");
+        tcp_write_line(connection, "tx: connected");
     }
 
-    int write(const uint8_t* src, size_t len) override {
-        return connection_ ? connection_->write(src, len) : 0;
+    void on_line(ITcpConnection& connection, LineView line) override {
+        char text[161];
+        print_text("rx: ");
+        print_text(line_to_cstr(line, text));
+        print_text("\n");
+
+        tcp_write_text(connection, "rx: ");
+        connection.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
+        tcp_write_newline(connection);
     }
 
-    bool readable() const override {
-        return connection_ && connection_->valid() && connection_->input_size() > 0;
+    void on_close(ITcpConnection& connection) override {
+        (void)connection;
+        print_text("closed\n");
     }
 
-    bool writable() const override {
-        return connection_ && connection_->valid();
+    void on_error(int error_code) override {
+        (void)error_code;
+        print_text("tcp client error\n");
     }
-
-    bool valid() const override {
-        return connection_ && connection_->valid();
-    }
-
-    ITcpConnection* connection() { return connection_; }
-    const ITcpConnection* connection() const { return connection_; }
-
-private:
-    ITcpConnection* connection_ = nullptr;
 };
 
-static TcpConnectionByteStream inbound_stream;
-
-static void handle_rx_line(LineView line) {
-    ITcpConnection* connection = inbound_stream.connection();
-    if (!connection || !connection->valid()) {
-        return;
-    }
-
-    print_text("rx: ");
-    print_line_view(line);
-    print_text("\n");
-
-    tcp_write_text(*connection, "rx: ");
-    connection->write(reinterpret_cast<const uint8_t*>(line.data), line.size);
-    tcp_write_newline(*connection);
-}
-
-static LineProtocolReader<160> inbound_lines(inbound_stream, LineProtocolOptions{}, [](LineView line) {
-    handle_rx_line(line);
-});
+static LineCallbacks line_callbacks;
+static TcpLineClientHandler<160> handler(line_callbacks);
 
 static void write_periodic_tcp_line() {
-    ITcpConnection* connection = inbound_stream.connection();
+    ITcpConnection* connection = handler.connection();
     if (!connection || !connection->valid()) {
         return;
     }
@@ -140,34 +97,6 @@ static void write_periodic_tcp_line() {
     tcp_write_uint32(*connection, tx_count++);
     tcp_write_newline(*connection);
 }
-
-struct LineClientHandler final : public ITcpClientHandler {
-    void on_connect(ITcpConnection& connection, const TcpPeerInfo& peer) override {
-        (void)peer;
-        inbound_stream.bind(&connection);
-        print_text("connected\n");
-        tcp_write_line(connection, "tx: connected");
-    }
-
-    void on_data(ITcpConnection& connection) override {
-        (void)connection;
-        inbound_lines.poll(event_loop.clock().micros());
-    }
-
-    void on_close(ITcpConnection& connection) override {
-        (void)connection;
-        inbound_stream.unbind();
-        print_text("closed\n");
-    }
-
-    void on_error(int error_code) override {
-        (void)error_code;
-        inbound_stream.unbind();
-        print_text("tcp client error\n");
-    }
-};
-
-LineClientHandler handler;
 
 #if defined(ARDUINO)
 static bool wifi_credentials_configured() {

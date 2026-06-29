@@ -68,6 +68,7 @@ add_unit_test(test_event_loop_remove_inside_callback tests/test_event_loop_remov
 add_unit_test(test_protocol_readers tests/test_protocol_readers.cpp)
 add_unit_test(test_linux_fifo_stream tests/test_linux_fifo_stream.cpp)
 add_unit_test(test_linux_libevent_loop tests/test_linux_libevent_loop.cpp)
+add_unit_test(test_libevent_periodic_timer_drift tests/test_libevent_periodic_timer_drift.cpp)
 add_unit_test(test_tcp_line_server tests/test_tcp_line_server.cpp)
 add_unit_test(test_tcp_fixed_header_server tests/test_tcp_fixed_header_server.cpp)
 add_unit_test(test_tcp_server_shutdown tests/test_tcp_server_shutdown.cpp)

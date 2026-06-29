@@ -126,10 +126,6 @@ static void serial_write_int(int value) {
     serial_write_uint32(static_cast<uint32_t>(value));
 }
 
-static void tcp_write_text(ITcpConnection& connection, const char* text) {
-    connection.write(reinterpret_cast<const uint8_t*>(text), strlen(text));
-}
-
 static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
     char digits[10];
     size_t n = 0;
@@ -141,16 +137,6 @@ static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
         const char c = digits[--n];
         connection.write(reinterpret_cast<const uint8_t*>(&c), 1);
     }
-}
-
-static void tcp_write_newline(ITcpConnection& connection) {
-    const uint8_t newline = '\n';
-    connection.write(&newline, 1);
-}
-
-static void tcp_write_line(ITcpConnection& connection, const char* text) {
-    tcp_write_text(connection, text);
-    tcp_write_newline(connection);
 }
 
 #if defined(ARDUINO)

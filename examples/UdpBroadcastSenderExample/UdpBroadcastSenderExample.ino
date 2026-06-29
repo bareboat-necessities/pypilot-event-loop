@@ -92,7 +92,7 @@ static bool setup_example(const char* host, uint16_t port, uint16_t local_port) 
     }
     event_loop.on_repeat(1000, []() {
         const char message[] = "pypilot udp broadcast\n";
-        udp.send(reinterpret_cast<const uint8_t*>(message), strlen(message));
+        udp.write(reinterpret_cast<const uint8_t*>(message), strlen(message));
         ++sequence;
         print_text("sent udp datagram ");
         print_number(sequence);

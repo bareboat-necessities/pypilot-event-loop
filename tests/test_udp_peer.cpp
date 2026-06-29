@@ -44,7 +44,7 @@ int main() {
 
     assert(b.set_remote("127.0.0.1", 23001));
     const uint8_t reply[] = {'o', 'k'};
-    assert(b.send(reply, sizeof(reply)) == static_cast<int>(sizeof(reply)));
+    assert(b.write(reply, sizeof(reply)) == static_cast<int>(sizeof(reply)));
 
     async_event_loop::UdpEndpoint reply_source{};
     n = 0;

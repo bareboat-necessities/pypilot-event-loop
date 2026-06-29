@@ -12,3 +12,7 @@
 #include "async_event_loop/native_udp.hpp"
 #include "async_event_loop/native_tcp.hpp"
 #include "async_event_loop/native_pin_io.hpp"
+
+#if defined(ARDUINO)
+#include "async_event_loop_arduino/arduino_wifi.hpp"
+#endif

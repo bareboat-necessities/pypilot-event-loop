@@ -12,6 +12,17 @@
 #include "async_event_loop/scheduler.hpp"
 
 namespace async_event_loop {
+namespace detail {
+
+inline uint64_t periodic_timer_next_delay_us(uint64_t& next_due_us,
+                                             uint64_t period_us,
+                                             uint64_t now_us) {
+    const uint64_t overdue_us = now_us > next_due_us ? now_us - next_due_us : 0;
+    next_due_us += period_us;
+    return period_us > overdue_us ? period_us - overdue_us : 0;
+}
+
+} // namespace detail
 
 class LinuxLibeventLoop final : public IScheduler {
 public:
@@ -41,6 +52,7 @@ public:
         item->loop = this;
         item->task = &task;
         item->period_us = period_us;
+        item->next_due_us = clock_.micros() + period_us;
         item->periodic = true;
         item->ev = evtimer_new(base_, &LinuxLibeventLoop::timer_callback, item.get());
         if (!item->ev) {
@@ -65,6 +77,7 @@ public:
         item->loop = this;
         item->task = &task;
         item->period_us = 0;
+        item->next_due_us = due_us;
         item->periodic = false;
         item->ev = evtimer_new(base_, &LinuxLibeventLoop::timer_callback, item.get());
         if (!item->ev) {
@@ -141,6 +154,7 @@ private:
         IRuntimeTask* task = nullptr;
         event* ev = nullptr;
         uint64_t period_us = 0;
+        uint64_t next_due_us = 0;
         bool periodic = false;
         bool removed = false;
     };
@@ -287,7 +301,12 @@ private:
         item->task->poll(loop->clock_.micros());
         loop->leave_callback();
         if (!item->removed && item->periodic && item->ev) {
-            timeval tv = timeval_from_us(item->period_us);
+            const uint64_t now_us = loop->clock_.micros();
+            const uint64_t next_delay_us = detail::periodic_timer_next_delay_us(
+                item->next_due_us,
+                item->period_us,
+                now_us);
+            timeval tv = timeval_from_us(next_delay_us);
             evtimer_add(item->ev, &tv);
         } else if (!item->periodic) {
             item->removed = true;

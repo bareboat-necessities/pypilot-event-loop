@@ -338,7 +338,7 @@ static void setup_tasks() {
 
     event_loop.on_repeat(1000, []() {
         const char message[] = "integrated udp broadcast\n";
-        udp.send(reinterpret_cast<const uint8_t*>(message), strlen(message));
+        udp.write(reinterpret_cast<const uint8_t*>(message), strlen(message));
         ++udp_tx_count;
     });
 

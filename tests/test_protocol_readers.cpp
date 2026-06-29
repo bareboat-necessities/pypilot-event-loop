@@ -108,6 +108,74 @@ int main() {
     }
 
     {
+        MemoryByteStream<128> stream;
+        int messages = 0;
+        char captured[3][48]{};
+
+        JsonProtocolReader<64> reader(stream, JsonProtocolOptions{}, [&](JsonView json) {
+            assert(messages < 3);
+            memcpy(captured[messages], json.data, json.size);
+            captured[messages][json.size] = '\0';
+            ++messages;
+        });
+
+        const uint8_t data[] = "  {\"a\":1} [true,false,{\"s\":\"brace } in string\"}]\n\"ok\"";
+        assert(stream.write(data, sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
+        reader.poll(0);
+
+        assert(messages == 3);
+        assert(strcmp(captured[0], "{\"a\":1}") == 0);
+        assert(strcmp(captured[1], "[true,false,{\"s\":\"brace } in string\"}]") == 0);
+        assert(strcmp(captured[2], "\"ok\"") == 0);
+        assert(reader.stats().messages == 3);
+    }
+
+    {
+        MemoryByteStream<128> stream;
+        int messages = 0;
+        char captured[2][32]{};
+
+        JsonProtocolReader<64> reader(stream, JsonProtocolOptions{}, [&](JsonView json) {
+            assert(messages < 2);
+            memcpy(captured[messages], json.data, json.size);
+            captured[messages][json.size] = '\0';
+            ++messages;
+        });
+
+        const uint8_t part1[] = "{\"split\":";
+        const uint8_t part2[] = "[1,2,3]} null";
+        assert(stream.write(part1, sizeof(part1) - 1) == static_cast<int>(sizeof(part1) - 1));
+        reader.poll(0);
+        assert(messages == 0);
+
+        assert(stream.write(part2, sizeof(part2) - 1) == static_cast<int>(sizeof(part2) - 1));
+        reader.poll(0);
+        assert(messages == 2);
+        assert(strcmp(captured[0], "{\"split\":[1,2,3]}") == 0);
+        assert(strcmp(captured[1], "null") == 0);
+    }
+
+    {
+        MemoryByteStream<128> stream;
+        int messages = 0;
+        char captured[2][16]{};
+
+        JsonProtocolReader<64> reader(stream, JsonProtocolOptions{}, [&](JsonView json) {
+            assert(messages < 2);
+            memcpy(captured[messages], json.data, json.size);
+            captured[messages][json.size] = '\0';
+            ++messages;
+        });
+
+        const uint8_t data[] = "123 false";
+        assert(stream.write(data, sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
+        reader.poll(0);
+        assert(messages == 2);
+        assert(strcmp(captured[0], "123") == 0);
+        assert(strcmp(captured[1], "false") == 0);
+    }
+
+    {
         MemoryByteStream<64> stream;
         int frames = 0;
         uint8_t captured[2][3]{};

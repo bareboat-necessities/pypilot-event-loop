@@ -1,7 +1,6 @@
 #if defined(ARDUINO)
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
 #include <Arduino.h>
-#include <WiFi.h>
 #ifndef PYPILOT_WIFI_SSID
 #define PYPILOT_WIFI_SSID "ssid"
 #endif
@@ -47,33 +46,16 @@ static void print_number(uint16_t value) {
 #endif
 }
 
-#if defined(ARDUINO)
-static bool wifi_credentials_configured() {
-    return strcmp(PYPILOT_WIFI_SSID, "ssid") != 0 && PYPILOT_WIFI_SSID[0] != '\0';
-}
-
-static bool connect_wifi() {
-    if (!wifi_credentials_configured()) {
-        print_text("wifi credentials are placeholders\n");
-        return false;
-    }
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(PYPILOT_WIFI_SSID, PYPILOT_WIFI_PASSWORD);
-    const unsigned long start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - start_ms >= PYPILOT_WIFI_CONNECT_TIMEOUT_MS) {
-            print_text("wifi connect timeout\n");
-            return false;
-        }
-        delay(250);
-    }
-    return true;
-}
-#endif
-
 static bool setup_example(uint16_t port) {
 #if defined(ARDUINO)
-    if (!connect_wifi()) {
+    const WiFiConnectResult wifi_result = connect_wifi_result(
+        PYPILOT_WIFI_SSID,
+        PYPILOT_WIFI_PASSWORD,
+        PYPILOT_WIFI_CONNECT_TIMEOUT_MS
+    );
+    if (wifi_result != WiFiConnectResult::Connected) {
+        print_text(wifi_connect_result_text(wifi_result));
+        print_text("\n");
         return false;
     }
 #endif

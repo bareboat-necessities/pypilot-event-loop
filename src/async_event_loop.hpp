@@ -2,6 +2,7 @@
 
 #include "async_event_loop/event_loop.hpp"
 #include "async_event_loop/memory_stream.hpp"
+#include "async_event_loop/memory_pin_event_source.hpp"
 #include "async_event_loop/udp.hpp"
 #include "async_event_loop/protocol_reader.hpp"
 #include "async_event_loop/tcp.hpp"

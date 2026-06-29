@@ -1,8 +1,8 @@
 #include <cassert>
-#include "support/memory_stream.hpp"
+#include "async_event_loop.hpp"
 
 int main() {
-    using async_event_loop_test::MemoryByteStream;
+    using async_event_loop::MemoryByteStream;
 
     MemoryByteStream<4> stream;
     assert(stream.valid());

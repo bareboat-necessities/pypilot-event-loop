@@ -17,6 +17,15 @@ struct LineView {
     size_t size = 0;
 };
 
+struct JsonView {
+    constexpr JsonView() = default;
+    constexpr JsonView(const char* data_value, size_t size_value)
+        : data(data_value), size(size_value) {}
+
+    const char* data = nullptr;
+    size_t size = 0;
+};
+
 struct FrameView {
     constexpr FrameView() = default;
     constexpr FrameView(const uint8_t* data_value, size_t size_value)
@@ -41,6 +50,13 @@ struct LineProtocolOptions {
      * is observed and the existing truncated buffer is emitted/reset normally.
      */
     bool drop_overflow = true;
+};
+
+struct JsonProtocolOptions {
+    constexpr JsonProtocolOptions() = default;
+
+    /** Ignore spaces, tabs, carriage returns, and newlines before each JSON value. */
+    bool skip_leading_whitespace = true;
 };
 
 struct FixedFrameProtocolOptions {
@@ -201,6 +217,339 @@ private:
     size_t size_ = 0;
     ProtocolReaderStats stats_;
     ProtocolCallbackStorage<CallbackStorageSize, LineView> callback_;
+};
+
+/**
+ * Reads adjacent JSON text messages from a byte stream.
+ *
+ * The reader frames complete JSON values and emits the original bytes through
+ * JsonView. It deliberately does not build a JSON DOM or depend on a JSON
+ * library. It is meant for transports where each message is a valid JSON value:
+ * objects, arrays, strings, numbers, true, false, or null. Objects and arrays
+ * are self-delimiting; top-level numbers are emitted when a following non-number
+ * byte is observed.
+ */
+template<size_t BufferSize = 512, size_t CallbackStorageSize = 64>
+class JsonProtocolReader final : public IRuntimeTask {
+public:
+    explicit JsonProtocolReader(IByteStream& stream,
+                                JsonProtocolOptions options = JsonProtocolOptions{})
+        : stream_(stream), options_(options) {}
+
+    template<typename Callable>
+    JsonProtocolReader(IByteStream& stream,
+                       JsonProtocolOptions options,
+                       Callable callable)
+        : stream_(stream), options_(options) {
+        on_data_ready(callable);
+    }
+
+    template<typename Callable>
+    bool on_data_ready(Callable callable) {
+        return callback_.set(callable);
+    }
+
+    IByteStream& stream() { return stream_; }
+    const ProtocolReaderStats& stats() const { return stats_; }
+
+    void poll(uint64_t) override {
+        uint8_t byte = 0;
+        while (stream_.readable()) {
+            const int n = stream_.read(&byte, 1);
+            if (n <= 0) {
+                break;
+            }
+            ++stats_.bytes;
+            consume(static_cast<char>(byte));
+        }
+    }
+
+private:
+    enum class State {
+        Idle,
+        Container,
+        StringValue,
+        NumberValue,
+        LiteralValue
+    };
+
+    static bool is_ws(char c) {
+        return c == ' ' || c == '\t' || c == '\r' || c == '\n';
+    }
+
+    static bool is_digit(char c) {
+        return c >= '0' && c <= '9';
+    }
+
+    static bool is_nonzero_digit(char c) {
+        return c >= '1' && c <= '9';
+    }
+
+    static bool is_number_byte(char c) {
+        return is_digit(c) || c == '-' || c == '+' || c == '.' || c == 'e' || c == 'E';
+    }
+
+    static bool valid_number(const char* text, size_t len) {
+        if (!text || len == 0) {
+            return false;
+        }
+        size_t i = 0;
+        if (text[i] == '-') {
+            ++i;
+            if (i == len) {
+                return false;
+            }
+        }
+        if (text[i] == '0') {
+            ++i;
+        } else if (is_nonzero_digit(text[i])) {
+            while (i < len && is_digit(text[i])) {
+                ++i;
+            }
+        } else {
+            return false;
+        }
+        if (i < len && text[i] == '.') {
+            ++i;
+            if (i == len || !is_digit(text[i])) {
+                return false;
+            }
+            while (i < len && is_digit(text[i])) {
+                ++i;
+            }
+        }
+        if (i < len && (text[i] == 'e' || text[i] == 'E')) {
+            ++i;
+            if (i < len && (text[i] == '+' || text[i] == '-')) {
+                ++i;
+            }
+            if (i == len || !is_digit(text[i])) {
+                return false;
+            }
+            while (i < len && is_digit(text[i])) {
+                ++i;
+            }
+        }
+        return i == len;
+    }
+
+    bool append(char c) {
+        if (size_ >= BufferSize) {
+            ++stats_.overflows;
+            reset();
+            return false;
+        }
+        buffer_[size_++] = c;
+        return true;
+    }
+
+    bool push_container(char c) {
+        if (depth_ >= BufferSize) {
+            ++stats_.overflows;
+            reset();
+            return false;
+        }
+        stack_[depth_++] = c;
+        return true;
+    }
+
+    bool pop_container(char c) {
+        if (depth_ == 0) {
+            ++stats_.protocol_errors;
+            reset();
+            return false;
+        }
+        const char open = stack_[depth_ - 1];
+        if ((open == '{' && c != '}') || (open == '[' && c != ']')) {
+            ++stats_.protocol_errors;
+            reset();
+            return false;
+        }
+        --depth_;
+        return true;
+    }
+
+    void consume(char c) {
+        switch (state_) {
+        case State::Idle:
+            consume_idle(c);
+            break;
+        case State::Container:
+            consume_container(c);
+            break;
+        case State::StringValue:
+            consume_string_value(c);
+            break;
+        case State::NumberValue:
+            consume_number_value(c);
+            break;
+        case State::LiteralValue:
+            consume_literal_value(c);
+            break;
+        }
+    }
+
+    void consume_idle(char c) {
+        if (options_.skip_leading_whitespace && is_ws(c)) {
+            return;
+        }
+        if (c == '{' || c == '[') {
+            if (!append(c)) {
+                return;
+            }
+            if (!push_container(c)) {
+                return;
+            }
+            state_ = State::Container;
+            in_string_ = false;
+            escape_ = false;
+            return;
+        }
+        if (c == '"') {
+            if (!append(c)) {
+                return;
+            }
+            state_ = State::StringValue;
+            escape_ = false;
+            return;
+        }
+        if (c == '-' || is_digit(c)) {
+            if (!append(c)) {
+                return;
+            }
+            state_ = State::NumberValue;
+            return;
+        }
+        if (c == 't') {
+            start_literal("true", c);
+            return;
+        }
+        if (c == 'f') {
+            start_literal("false", c);
+            return;
+        }
+        if (c == 'n') {
+            start_literal("null", c);
+            return;
+        }
+        ++stats_.protocol_errors;
+        reset();
+    }
+
+    void consume_container(char c) {
+        if (!append(c)) {
+            return;
+        }
+        if (in_string_) {
+            if (escape_) {
+                escape_ = false;
+            } else if (c == '\\') {
+                escape_ = true;
+            } else if (c == '"') {
+                in_string_ = false;
+            }
+            return;
+        }
+        if (c == '"') {
+            in_string_ = true;
+            return;
+        }
+        if (c == '{' || c == '[') {
+            push_container(c);
+            return;
+        }
+        if (c == '}' || c == ']') {
+            if (pop_container(c) && depth_ == 0) {
+                emit_json();
+            }
+        }
+    }
+
+    void consume_string_value(char c) {
+        if (!append(c)) {
+            return;
+        }
+        if (escape_) {
+            escape_ = false;
+            return;
+        }
+        if (c == '\\') {
+            escape_ = true;
+            return;
+        }
+        if (c == '"') {
+            emit_json();
+        }
+    }
+
+    void consume_number_value(char c) {
+        if (is_number_byte(c)) {
+            append(c);
+            return;
+        }
+        if (valid_number(buffer_, size_)) {
+            emit_json();
+        } else {
+            ++stats_.protocol_errors;
+            reset();
+        }
+        consume(c);
+    }
+
+    void start_literal(const char* literal, char first) {
+        literal_ = literal;
+        literal_pos_ = 0;
+        state_ = State::LiteralValue;
+        consume_literal_value(first);
+    }
+
+    void consume_literal_value(char c) {
+        if (!literal_ || literal_[literal_pos_] == '\0' || literal_[literal_pos_] != c) {
+            ++stats_.protocol_errors;
+            reset();
+            return;
+        }
+        if (!append(c)) {
+            return;
+        }
+        ++literal_pos_;
+        if (literal_[literal_pos_] == '\0') {
+            emit_json();
+        }
+    }
+
+    void emit_json() {
+        JsonView view;
+        view.data = buffer_;
+        view.size = size_;
+        callback_.invoke(view);
+        ++stats_.messages;
+        reset();
+    }
+
+    void reset() {
+        state_ = State::Idle;
+        size_ = 0;
+        depth_ = 0;
+        in_string_ = false;
+        escape_ = false;
+        literal_ = nullptr;
+        literal_pos_ = 0;
+    }
+
+    IByteStream& stream_;
+    JsonProtocolOptions options_;
+    char buffer_[BufferSize]{};
+    char stack_[BufferSize]{};
+    size_t size_ = 0;
+    size_t depth_ = 0;
+    bool in_string_ = false;
+    bool escape_ = false;
+    const char* literal_ = nullptr;
+    size_t literal_pos_ = 0;
+    State state_ = State::Idle;
+    ProtocolReaderStats stats_;
+    ProtocolCallbackStorage<CallbackStorageSize, JsonView> callback_;
 };
 
 template<size_t BufferSize = 256, size_t CallbackStorageSize = 64>

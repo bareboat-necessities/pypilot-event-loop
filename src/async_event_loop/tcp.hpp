@@ -3,6 +3,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "event_loop.hpp"
+
 namespace async_event_loop {
 
 struct TcpListenOptions {
@@ -35,19 +37,21 @@ struct TcpPeerInfo {
     uint16_t port = 0;
 };
 
-class ITcpConnection {
+class ITcpConnection : public IByteStream {
 public:
-    virtual ~ITcpConnection() = default;
+    ~ITcpConnection() override = default;
 
-    virtual bool valid() const = 0;
     virtual void close() = 0;
 
     virtual const TcpPeerInfo& peer() const = 0;
     virtual size_t input_size() const = 0;
     virtual size_t output_size() const = 0;
 
-    virtual int read(uint8_t* dst, size_t max_len) = 0;
-    virtual int write(const uint8_t* src, size_t len) = 0;
+    int read(uint8_t* dst, size_t max_len) override = 0;
+    int write(const uint8_t* src, size_t len) override = 0;
+
+    bool readable() const override { return valid() && input_size() > 0; }
+    bool writable() const override { return valid(); }
 
     virtual bool peek(uint8_t* dst, size_t len) = 0;
     virtual bool read_exact(uint8_t* dst, size_t len) = 0;
@@ -62,6 +66,42 @@ public:
         (void)options;
         return false;
     }
+};
+
+class TcpConnectionByteStream final : public IByteStream {
+public:
+    TcpConnectionByteStream() = default;
+    explicit TcpConnectionByteStream(ITcpConnection& connection) : connection_(&connection) {}
+
+    void bind(ITcpConnection* connection) { connection_ = connection; }
+    void bind(ITcpConnection& connection) { connection_ = &connection; }
+    void unbind() { connection_ = nullptr; }
+
+    ITcpConnection* connection() { return connection_; }
+    const ITcpConnection* connection() const { return connection_; }
+
+    int read(uint8_t* dst, size_t max_len) override {
+        return connection_ ? connection_->read(dst, max_len) : 0;
+    }
+
+    int write(const uint8_t* src, size_t len) override {
+        return connection_ ? connection_->write(src, len) : 0;
+    }
+
+    bool readable() const override {
+        return connection_ && connection_->readable();
+    }
+
+    bool writable() const override {
+        return connection_ && connection_->writable();
+    }
+
+    bool valid() const override {
+        return connection_ && connection_->valid();
+    }
+
+private:
+    ITcpConnection* connection_ = nullptr;
 };
 
 class ITcpServerHandler {

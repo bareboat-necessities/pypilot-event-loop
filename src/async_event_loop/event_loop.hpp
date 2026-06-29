@@ -36,17 +36,6 @@ public:
     virtual int native_fd() const { return -1; }
 };
 
-class IDatagramStream : public IByteStream {
-public:
-    int read(uint8_t* dst, size_t max_len) override { return recv(dst, max_len); }
-    int write(const uint8_t* src, size_t len) override { return send(src, len); }
-    bool writable() const override { return valid(); }
-    bool is_datagram() const override { return true; }
-
-    virtual int recv(uint8_t* dst, size_t max_len) = 0;
-    virtual int send(const uint8_t* src, size_t len) = 0;
-};
-
 struct EventHandle {
     static constexpr uint16_t invalid_slot = 0xffffu;
 

@@ -2,7 +2,6 @@
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP
 #define ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP
 #include <Arduino.h>
-#include <WiFi.h>
 #ifndef PYPILOT_WIFI_SSID
 #define PYPILOT_WIFI_SSID "ssid"
 #endif
@@ -265,30 +264,6 @@ ael::TcpLineServerHandler<160> server_handler(server_line_handler);
 ClientLineHandler client_line_handler;
 ael::TcpLineClientHandler<160> client_handler(client_line_handler);
 
-#if defined(ARDUINO)
-static bool wifi_credentials_configured() {
-    return strcmp(PYPILOT_WIFI_SSID, "ssid") != 0 && PYPILOT_WIFI_SSID[0] != '\0';
-}
-
-static bool connect_wifi() {
-    if (!wifi_credentials_configured()) {
-        serial_write_text("wifi credentials are placeholders\n");
-        return false;
-    }
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(PYPILOT_WIFI_SSID, PYPILOT_WIFI_PASSWORD);
-    const unsigned long start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED) {
-        if (millis() - start_ms >= PYPILOT_WIFI_CONNECT_TIMEOUT_MS) {
-            serial_write_text("wifi connect timeout\n");
-            return false;
-        }
-        delay(250);
-    }
-    return true;
-}
-#endif
-
 static bool setup_network(const char* client_host, uint16_t client_port, uint16_t server_port) {
     ael::TcpListenOptions listen_options;
     listen_options.host = "0.0.0.0";
@@ -389,7 +364,14 @@ void setup() {
 #else
     PYPILOT_SERIAL_OUT.begin(115200);
 #endif
-    if (!connect_wifi()) {
+    const ael::WiFiConnectResult wifi_result = ael::connect_wifi_result(
+        PYPILOT_WIFI_SSID,
+        PYPILOT_WIFI_PASSWORD,
+        PYPILOT_WIFI_CONNECT_TIMEOUT_MS
+    );
+    if (wifi_result != ael::WiFiConnectResult::Connected) {
+        serial_write_text(ael::wifi_connect_result_text(wifi_result));
+        serial_write_text("\n");
         serial_write_text("integrated event loop wifi setup failed\n");
         setup_failed = true;
         return;

@@ -119,8 +119,8 @@ int main() {
             ++messages;
         });
 
-        const uint8_t data[] = "  {\"a\":1} [true,false,{\"s\":\"brace } in string\"}]\n\"ok\"";
-        assert(stream.write(data, sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
+        const char data[] = "  {\"a\":1} [true,false,{\"s\":\"brace } in string\"}]\n\"ok\"";
+        assert(stream.write(reinterpret_cast<const uint8_t*>(data), sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
         reader.poll(0);
 
         assert(messages == 3);
@@ -142,13 +142,13 @@ int main() {
             ++messages;
         });
 
-        const uint8_t part1[] = "{\"split\":";
-        const uint8_t part2[] = "[1,2,3]} null";
-        assert(stream.write(part1, sizeof(part1) - 1) == static_cast<int>(sizeof(part1) - 1));
+        const char part1[] = "{\"split\":";
+        const char part2[] = "[1,2,3]} null";
+        assert(stream.write(reinterpret_cast<const uint8_t*>(part1), sizeof(part1) - 1) == static_cast<int>(sizeof(part1) - 1));
         reader.poll(0);
         assert(messages == 0);
 
-        assert(stream.write(part2, sizeof(part2) - 1) == static_cast<int>(sizeof(part2) - 1));
+        assert(stream.write(reinterpret_cast<const uint8_t*>(part2), sizeof(part2) - 1) == static_cast<int>(sizeof(part2) - 1));
         reader.poll(0);
         assert(messages == 2);
         assert(strcmp(captured[0], "{\"split\":[1,2,3]}") == 0);
@@ -167,8 +167,8 @@ int main() {
             ++messages;
         });
 
-        const uint8_t data[] = "123 false";
-        assert(stream.write(data, sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
+        const char data[] = "123 false";
+        assert(stream.write(reinterpret_cast<const uint8_t*>(data), sizeof(data) - 1) == static_cast<int>(sizeof(data) - 1));
         reader.poll(0);
         assert(messages == 2);
         assert(strcmp(captured[0], "123") == 0);

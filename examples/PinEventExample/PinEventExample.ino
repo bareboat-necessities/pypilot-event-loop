@@ -2,7 +2,6 @@
 #include <Arduino.h>
 #endif
 
-#include <stddef.h>
 #include <async_event_loop.hpp>
 
 using namespace async_event_loop;
@@ -10,39 +9,7 @@ using namespace async_event_loop;
 EventLoop<> event_loop;
 uint32_t pin_events = 0;
 
-template<size_t Capacity>
-class LocalPinEventSource final : public IPinEventSource {
-public:
-    bool valid() const override { return true; }
-
-    bool push(const PinEvent& event) {
-        if (count_ >= Capacity) {
-            return false;
-        }
-        events_[tail_] = event;
-        tail_ = (tail_ + 1) % Capacity;
-        ++count_;
-        return true;
-    }
-
-    bool read_event(PinEvent& event) override {
-        if (count_ == 0) {
-            return false;
-        }
-        event = events_[head_];
-        head_ = (head_ + 1) % Capacity;
-        --count_;
-        return true;
-    }
-
-private:
-    PinEvent events_[Capacity]{};
-    size_t head_ = 0;
-    size_t tail_ = 0;
-    size_t count_ = 0;
-};
-
-LocalPinEventSource<4> pin_source;
+MemoryPinEventSource<4> pin_source;
 
 void setup_example() {
     event_loop.on_pin_event(pin_source, [](const PinEvent& event) {

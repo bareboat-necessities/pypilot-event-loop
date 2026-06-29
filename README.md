@@ -14,6 +14,7 @@ The public API exposes:
 - byte streams and datagram streams
 - byte/data-ready callbacks
 - line-delimited protocol readers
+- JSON text protocol readers
 - fixed-size frame protocol readers
 - header+payload protocol readers
 - UDP datagram interfaces with broadcast sender and receiver examples
@@ -98,6 +99,20 @@ event_loop.on_bytes_ready(stream, [&]() {
 });
 ```
 
+JSON text protocol:
+
+```cpp
+async_event_loop::JsonProtocolReader<256> json(stream, {}, [](async_event_loop::JsonView msg) {
+    // complete JSON text message; msg.data is not nul-terminated
+});
+
+event_loop.on_bytes_ready(stream, [&]() {
+    json.poll(event_loop.clock().micros());
+});
+```
+
+`JsonProtocolReader` frames valid JSON text messages without pulling in a JSON DOM library. It emits raw JSON bytes for objects, arrays, strings, numbers, `true`, `false`, and `null`. Objects, arrays, strings, and literals are self-delimiting. Top-level numbers are emitted after a following non-number byte, so numeric-only streams should separate messages with whitespace or another delimiter byte.
+
 Header+payload protocol:
 
 ```cpp
@@ -120,6 +135,18 @@ Linux run example:
 ```
 
 Send newline-delimited messages. The example echoes each received line as `line: ...`.
+
+## JSON protocol example
+
+`examples/JsonProtocolExample/JsonProtocolExample.ino` is a unified Arduino/Linux example. It uses a local in-memory stream so the example stays portable and does not depend on serial, UDP, TCP, or Linux fd backends.
+
+Linux run example:
+
+```bash
+./build/json_protocol_example
+```
+
+The example feeds four adjacent JSON messages into `JsonProtocolReader`: an object, an array, a string, and `null`.
 
 ## UDP datagram API
 
@@ -201,6 +228,7 @@ Shared Linux/Arduino examples:
 ```text
 examples/EventLoopTimerExample/EventLoopTimerExample.ino
 examples/LineProtocolExample/LineProtocolExample.ino
+examples/JsonProtocolExample/JsonProtocolExample.ino
 examples/FixedHeaderProtocolExample/FixedHeaderProtocolExample.ino
 examples/SerialLineProtocolExample/SerialLineProtocolExample.ino
 examples/PinEventExample/PinEventExample.ino
@@ -236,7 +264,7 @@ Linux FIFO IPC example:
 examples/LinuxFifoIpcExample/LinuxFifoIpcExample.cpp
 ```
 
-The UDP examples demonstrate periodic broadcast send and event-loop-driven datagram receive. The TCP examples demonstrate connect, listen, accept, readable data, line echo, peer disconnect detection, listener shutdown, and active client shutdown.
+The protocol examples demonstrate timers, line framing, JSON text framing, fixed-header framing, and serial-line input. The UDP examples demonstrate periodic broadcast send and event-loop-driven datagram receive. The TCP examples demonstrate connect, listen, accept, readable data, line echo, peer disconnect detection, listener shutdown, and active client shutdown.
 
 ## Integrated event-loop example
 
@@ -284,6 +312,7 @@ arduino-cli core update-index --additional-urls https://espressif.github.io/ardu
 arduino-cli core install esp32:esp32 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/EventLoopTimerExample
 arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/LineProtocolExample
+arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/JsonProtocolExample
 arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/FixedHeaderProtocolExample
 arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/SerialLineProtocolExample
 arduino-cli compile --fqbn esp32:esp32:esp32s3 --libraries . examples/PinEventExample

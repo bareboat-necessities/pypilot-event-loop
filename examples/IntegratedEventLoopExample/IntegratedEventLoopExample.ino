@@ -57,29 +57,29 @@
 #include <string.h>
 #include <async_event_loop.hpp>
 
-using namespace async_event_loop;
+namespace ael = async_event_loop;
 
-EventLoop<48> event_loop;
-NativeTcpServer tcp_server(event_loop.scheduler());
-NativeTcpClient tcp_client(event_loop.scheduler());
-NativeUdpDatagramStream udp;
+ael::EventLoop<48> event_loop;
+ael::NativeTcpServer tcp_server(event_loop.scheduler());
+ael::NativeTcpClient tcp_client(event_loop.scheduler());
+ael::NativeUdpDatagramStream udp;
 
 #if defined(ARDUINO)
-NativeSerialStream serial_in(Serial);
-NativeSerialStream serial_out(PYPILOT_SERIAL_OUT);
+ael::NativeSerialStream serial_in(Serial);
+ael::NativeSerialStream serial_out(PYPILOT_SERIAL_OUT);
 #endif
 
 #if !defined(ARDUINO)
-NativeSerialStream serial_in;
-NativeSerialStream serial_out;
+ael::NativeSerialStream serial_in;
+ael::NativeSerialStream serial_out;
 #endif
 
-IDigitalInputPin* digital_in = nullptr;
-IDigitalOutputPin* digital_out = nullptr;
-IAnalogInputPin* analog_in = nullptr;
-IAnalogOutputPin* analog_out = nullptr;
+ael::IDigitalInputPin* digital_in = nullptr;
+ael::IDigitalOutputPin* digital_out = nullptr;
+ael::IAnalogInputPin* analog_in = nullptr;
+ael::IAnalogOutputPin* analog_out = nullptr;
 
-ITcpConnection* tcp_client_connection = nullptr;
+ael::ITcpConnection* tcp_client_connection = nullptr;
 uint32_t tcp_client_tx_count = 0;
 uint32_t udp_tx_count = 0;
 uint32_t serial_tx_count = 0;
@@ -104,6 +104,13 @@ static void serial_write_text(const char* text) {
     serial_out.write(reinterpret_cast<const uint8_t*>(text), text_len(text));
 }
 
+static void serial_write_line(ael::LineView line) {
+    if (line.data && line.size > 0) {
+        serial_out.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
+    }
+    serial_write_text("\n");
+}
+
 static void serial_write_uint32(uint32_t value) {
     char digits[10];
     size_t n = 0;
@@ -126,7 +133,7 @@ static void serial_write_int(int value) {
     serial_write_uint32(static_cast<uint32_t>(value));
 }
 
-static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
+static void tcp_write_uint32(ael::ITcpConnection& connection, uint32_t value) {
     char digits[10];
     size_t n = 0;
     do {
@@ -141,10 +148,10 @@ static void tcp_write_uint32(ITcpConnection& connection, uint32_t value) {
 
 #if defined(ARDUINO)
 static bool setup_pins() {
-    static NativeDigitalInputPin digital_in_pin(PYPILOT_DIGITAL_IN_PIN, DigitalPinMode::InputPullup);
-    static NativeDigitalOutputPin digital_out_pin(PYPILOT_DIGITAL_OUT_PIN, false);
-    static NativeAnalogInputPin analog_in_pin(PYPILOT_ANALOG_IN_PIN);
-    static NativeAnalogOutputPin analog_out_pin(PYPILOT_ANALOG_OUT_PIN);
+    static ael::NativeDigitalInputPin digital_in_pin(PYPILOT_DIGITAL_IN_PIN, ael::DigitalPinMode::InputPullup);
+    static ael::NativeDigitalOutputPin digital_out_pin(PYPILOT_DIGITAL_OUT_PIN, false);
+    static ael::NativeAnalogInputPin analog_in_pin(PYPILOT_ANALOG_IN_PIN);
+    static ael::NativeAnalogOutputPin analog_out_pin(PYPILOT_ANALOG_OUT_PIN);
     digital_in = &digital_in_pin;
     digital_out = &digital_out_pin;
     analog_in = &analog_in_pin;
@@ -156,10 +163,10 @@ static bool setup_pins(const char* digital_in_path,
                        const char* digital_out_path,
                        const char* analog_in_path,
                        const char* analog_out_path) {
-    static NativeDigitalInputPin digital_in_pin(digital_in_path);
-    static NativeDigitalOutputPin digital_out_pin(digital_out_path);
-    static NativeAnalogInputPin analog_in_pin(analog_in_path);
-    static NativeAnalogOutputPin analog_out_pin(analog_out_path);
+    static ael::NativeDigitalInputPin digital_in_pin(digital_in_path);
+    static ael::NativeDigitalOutputPin digital_out_pin(digital_out_path);
+    static ael::NativeAnalogInputPin analog_in_pin(analog_in_path);
+    static ael::NativeAnalogOutputPin analog_out_pin(analog_out_path);
     digital_in = &digital_in_pin;
     digital_out = &digital_out_pin;
     analog_in = &analog_in_pin;
@@ -191,51 +198,56 @@ static void write_analog_output_pin(int value) {
     }
 }
 
-LineProtocolReader<128> serial_lines(serial_in, LineProtocolOptions{}, [](LineView line) {
+ael::LineProtocolReader<128> serial_lines(serial_in, ael::LineProtocolOptions{}, [](ael::LineView line) {
     serial_write_text("serial rx: ");
-    if (line.data && line.size > 0) {
-        serial_out.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
-    }
-    serial_write_text("\n");
+    serial_write_line(line);
 });
 
-struct ServerHandler final : public ITcpServerHandler {
-    void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
+struct ServerLineHandler final : public ael::ITcpLineServerHandler {
+    void on_accept(ael::ITcpConnection& connection, const ael::TcpPeerInfo& peer) override {
         (void)peer;
-        tcp_write_line(connection, "server: accepted");
+        ael::tcp_write_line(connection, "server: accepted");
     }
 
-    void on_data(ITcpConnection& connection) override {
-        char line[160];
-        while (connection.read_line(line, sizeof(line))) {
-            serial_write_text("tcp server rx: ");
-            serial_write_text(line);
-            serial_write_text("\n");
-            tcp_write_text(connection, "server rx: ");
-            tcp_write_text(connection, line);
-            tcp_write_newline(connection);
-        }
+    void on_line(ael::ITcpConnection& connection, ael::LineView line) override {
+        serial_write_text("tcp server rx: ");
+        serial_write_line(line);
+        ael::tcp_write_text(connection, "server rx: ");
+        ael::tcp_write_line(connection, line);
+    }
+
+    void on_close(ael::ITcpConnection& connection) override {
+        (void)connection;
+        serial_write_text("tcp server connection closed\n");
+    }
+
+    void on_error(ael::ITcpConnection& connection, int error_code) override {
+        (void)connection;
+        (void)error_code;
+        serial_write_text("tcp server connection error\n");
+    }
+
+    void on_listener_error(int error_code) override {
+        (void)error_code;
+        serial_write_text("tcp server listener error\n");
     }
 };
 
-struct ClientHandler final : public ITcpClientHandler {
-    void on_connect(ITcpConnection& connection, const TcpPeerInfo& peer) override {
+struct ClientLineHandler final : public ael::ITcpLineClientHandler {
+    void on_connect(ael::ITcpConnection& connection, const ael::TcpPeerInfo& peer) override {
         (void)peer;
         tcp_client_connection = &connection;
-        tcp_write_line(connection, "client: connected");
+        ael::tcp_write_line(connection, "client: connected");
         serial_write_text("tcp client connected\n");
     }
 
-    void on_data(ITcpConnection& connection) override {
-        char line[160];
-        while (connection.read_line(line, sizeof(line))) {
-            serial_write_text("tcp client rx: ");
-            serial_write_text(line);
-            serial_write_text("\n");
-        }
+    void on_line(ael::ITcpConnection& connection, ael::LineView line) override {
+        (void)connection;
+        serial_write_text("tcp client rx: ");
+        serial_write_line(line);
     }
 
-    void on_close(ITcpConnection& connection) override {
+    void on_close(ael::ITcpConnection& connection) override {
         (void)connection;
         tcp_client_connection = nullptr;
         serial_write_text("tcp client closed\n");
@@ -248,8 +260,10 @@ struct ClientHandler final : public ITcpClientHandler {
     }
 };
 
-ServerHandler server_handler;
-ClientHandler client_handler;
+ServerLineHandler server_line_handler;
+ael::TcpLineServerHandler<160> server_handler(server_line_handler);
+ClientLineHandler client_line_handler;
+ael::TcpLineClientHandler<160> client_handler(client_line_handler);
 
 #if defined(ARDUINO)
 static bool wifi_credentials_configured() {
@@ -276,7 +290,7 @@ static bool connect_wifi() {
 #endif
 
 static bool setup_network(const char* client_host, uint16_t client_port, uint16_t server_port) {
-    TcpListenOptions listen_options;
+    ael::TcpListenOptions listen_options;
     listen_options.host = "0.0.0.0";
     listen_options.port = server_port;
     if (!tcp_server.listen(listen_options, server_handler)) {
@@ -284,7 +298,7 @@ static bool setup_network(const char* client_host, uint16_t client_port, uint16_
         return false;
     }
 
-    TcpConnectOptions connect_options;
+    ael::TcpConnectOptions connect_options;
     connect_options.host = client_host;
     connect_options.port = client_port;
     if (!tcp_client.connect(connect_options, client_handler)) {
@@ -316,9 +330,9 @@ static void setup_tasks() {
 
     event_loop.on_repeat(1000, []() {
         if (tcp_client_connection && tcp_client_connection->valid()) {
-            tcp_write_text(*tcp_client_connection, "client tx: ");
+            ael::tcp_write_text(*tcp_client_connection, "client tx: ");
             tcp_write_uint32(*tcp_client_connection, tcp_client_tx_count++);
-            tcp_write_newline(*tcp_client_connection);
+            ael::tcp_write_newline(*tcp_client_connection);
         }
     });
 

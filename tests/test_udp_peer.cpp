@@ -8,6 +8,9 @@ int main() {
     async_event_loop::NativeUdpDatagramStream a;
     async_event_loop::NativeUdpDatagramStream b;
 
+    async_event_loop::IByteStream& byte_view = a;
+    assert(byte_view.is_datagram());
+
     assert(a.bind(0));
     assert(b.bind(0));
 

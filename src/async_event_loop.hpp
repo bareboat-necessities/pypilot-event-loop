@@ -15,6 +15,9 @@
 #include "async_event_loop/native_tcp.hpp"
 #include "async_event_loop/native_pin_io.hpp"
 
-#if defined(ARDUINO)
+#if defined(ARDUINO) && \
+    (defined(ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_TCP) || \
+     defined(ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI_UDP) || \
+     defined(ASYNC_EVENT_LOOP_ENABLE_ARDUINO_WIFI))
 #include "async_event_loop_arduino/arduino_wifi.hpp"
 #endif

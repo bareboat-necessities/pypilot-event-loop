@@ -43,117 +43,9 @@ static void print_number(uint16_t value) {
 #endif
 }
 
-static void print_line_view(LineView line) {
-#if defined(ARDUINO)
-    Serial.write(reinterpret_cast<const uint8_t*>(line.data), line.size);
-#else
-    std::cout.write(line.data, static_cast<std::streamsize>(line.size));
-#endif
-}
-
-class TcpConnectionByteStream final : public IByteStream {
-public:
-    void bind(ITcpConnection* connection) { connection_ = connection; }
-    void unbind() { connection_ = nullptr; }
-
-    int read(uint8_t* dst, size_t max_len) override {
-        return connection_ ? connection_->read(dst, max_len) : 0;
-    }
-
-    int write(const uint8_t* src, size_t len) override {
-        return connection_ ? connection_->write(src, len) : 0;
-    }
-
-    bool readable() const override {
-        return connection_ && connection_->valid() && connection_->input_size() > 0;
-    }
-
-    bool writable() const override {
-        return connection_ && connection_->valid();
-    }
-
-    bool valid() const override {
-        return connection_ && connection_->valid();
-    }
-
-    ITcpConnection* connection() { return connection_; }
-    const ITcpConnection* connection() const { return connection_; }
-
-private:
-    ITcpConnection* connection_ = nullptr;
-};
-
-struct ClientLineState {
-    ClientLineState() : reader(stream, LineProtocolOptions{}, [this](LineView line) { on_line(line); }) {}
-
-    bool in_use() const { return stream.connection() != nullptr; }
-
-    void bind(ITcpConnection& connection) { stream.bind(&connection); }
-    void unbind() { stream.unbind(); }
-
-    bool owns(ITcpConnection& connection) const { return stream.connection() == &connection; }
-
-    void poll(uint64_t now_us) { reader.poll(now_us); }
-
-    void on_line(LineView line) {
-        ITcpConnection* connection = stream.connection();
-        if (!connection || !connection->valid()) {
-            return;
-        }
-
-        print_text("line: ");
-        print_line_view(line);
-        print_text("\n");
-
-        if (line.size == 8 && memcmp(line.data, "shutdown", 8) == 0) {
-            server.close();
-            event_loop.request_exit();
-            return;
-        }
-
-        connection->write(reinterpret_cast<const uint8_t*>(line.data), line.size);
-        const uint8_t newline = '\n';
-        connection->write(&newline, 1);
-    }
-
-    TcpConnectionByteStream stream;
-    LineProtocolReader<256> reader;
-};
-
-static ClientLineState clients[8];
-
-static ClientLineState* find_client(ITcpConnection& connection) {
-    for (size_t i = 0; i < sizeof(clients) / sizeof(clients[0]); ++i) {
-        if (clients[i].owns(connection)) {
-            return &clients[i];
-        }
-    }
-    return nullptr;
-}
-
-static ClientLineState* acquire_client(ITcpConnection& connection) {
-    ClientLineState* existing = find_client(connection);
-    if (existing) {
-        return existing;
-    }
-    for (size_t i = 0; i < sizeof(clients) / sizeof(clients[0]); ++i) {
-        if (!clients[i].in_use()) {
-            clients[i].bind(connection);
-            return &clients[i];
-        }
-    }
-    return nullptr;
-}
-
-struct LineServerHandler final : public ITcpServerHandler {
+struct LineCallbacks final : public ITcpLineServerHandler {
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
-        ClientLineState* client = acquire_client(connection);
-        if (!client) {
-            print_text("too many clients\n");
-            connection.close();
-            return;
-        }
-
+        (void)connection;
         print_text("accepted ");
         print_text(peer.host);
         print_text(":");
@@ -161,14 +53,19 @@ struct LineServerHandler final : public ITcpServerHandler {
         print_text("\n");
     }
 
-    void on_data(ITcpConnection& connection) override {
-        ClientLineState* client = acquire_client(connection);
-        if (!client) {
-            print_text("too many clients\n");
-            connection.close();
+    void on_line(ITcpConnection& connection, LineView line) override {
+        char text[257];
+        print_text("line: ");
+        print_text(line_to_cstr(line, text));
+        print_text("\n");
+
+        if (line_equals(line, "shutdown")) {
+            server.close();
+            event_loop.request_exit();
             return;
         }
-        client->poll(event_loop.clock().micros());
+
+        tcp_write_line(connection, line);
     }
 
     void on_close(ITcpConnection& connection) override {
@@ -177,30 +74,27 @@ struct LineServerHandler final : public ITcpServerHandler {
         print_text(":");
         print_number(connection.peer().port);
         print_text("\n");
-
-        ClientLineState* client = find_client(connection);
-        if (client) {
-            client->unbind();
-        }
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
+        (void)connection;
         (void)error_code;
         print_text("connection error\n");
-
-        ClientLineState* client = find_client(connection);
-        if (client) {
-            client->unbind();
-        }
     }
 
     void on_listener_error(int error_code) override {
         (void)error_code;
         print_text("listener error\n");
     }
+
+    void on_too_many_connections(ITcpConnection& connection) override {
+        print_text("too many clients\n");
+        connection.close();
+    }
 };
 
-static LineServerHandler handler;
+static LineCallbacks line_callbacks;
+static TcpLineServerHandler<256, 8> handler(line_callbacks);
 
 #if defined(ARDUINO)
 static bool wifi_credentials_configured() {

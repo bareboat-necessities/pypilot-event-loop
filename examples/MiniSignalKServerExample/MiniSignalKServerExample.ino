@@ -16,12 +16,16 @@
 
 #include <stdint.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
 #include <async_event_loop.hpp>
+#include "../support/mini_signalk_support.hpp"
 
 using namespace async_event_loop;
+using async_event_loop_examples::DataModel;
+using async_event_loop_examples::NmeaTokenizer;
+using async_event_loop_examples::Real;
+using async_event_loop_examples::format_signalk_wind_update;
+using async_event_loop_examples::parse_mwv;
 
 static constexpr uint16_t signalk_port = 20223;
 static constexpr uint16_t nmea_port = 20224;
@@ -62,100 +66,6 @@ static void print_float(float value) {
     char text[32];
     snprintf(text, sizeof(text), "%.3f", static_cast<double>(value));
     print_text(text);
-}
-
-struct WindState {
-    float angle_apparent_rad = 0.0f;
-    float speed_apparent_m_s = 0.0f;
-    uint64_t last_update_us = 0;
-    bool valid = false;
-};
-
-class NmeaTokenizer {
-public:
-    static constexpr int max_fields = 8;
-
-    bool tokenize(char* text) {
-        reset();
-        if (!text) {
-            return false;
-        }
-
-        char* field_start = text;
-        while (field_count_ < max_fields) {
-            fields_[field_count_++] = field_start;
-            char* comma = strchr(field_start, ',');
-            if (!comma) {
-                break;
-            }
-            *comma = '\0';
-            field_start = comma + 1;
-        }
-        return field_count_ > 0;
-    }
-
-    int field_count() const { return field_count_; }
-
-    const char* field(int index) const {
-        if (index < 0 || index >= field_count_ || !fields_[index]) {
-            return "";
-        }
-        return fields_[index];
-    }
-
-private:
-    void reset() {
-        for (int i = 0; i < max_fields; ++i) {
-            fields_[i] = nullptr;
-        }
-        field_count_ = 0;
-    }
-
-    char* fields_[max_fields]{};
-    int field_count_ = 0;
-};
-
-static bool parse_mwv(const NmeaTokenizer& tokenizer, WindState& wind, uint64_t now_us) {
-    if (tokenizer.field_count() < 6 || strlen(tokenizer.field(0)) < 3) {
-        return false;
-    }
-
-    const char* talker_sentence = tokenizer.field(0);
-    const size_t sentence_len = strlen(talker_sentence);
-    const char* sentence = sentence_len >= 3 ? talker_sentence + sentence_len - 3 : talker_sentence;
-    if (strcmp(sentence, "MWV") != 0) {
-        return false;
-    }
-    if (strcmp(tokenizer.field(2), "R") != 0 || tokenizer.field(5)[0] != 'A') {
-        return false;
-    }
-
-    const char* angle_field = tokenizer.field(1);
-    const char* speed_field = tokenizer.field(3);
-    char* end_angle = nullptr;
-    char* end_speed = nullptr;
-    const float angle_deg = static_cast<float>(strtod(angle_field, &end_angle));
-    const float speed_value = static_cast<float>(strtod(speed_field, &end_speed));
-    if (end_angle == angle_field || end_speed == speed_field) {
-        return false;
-    }
-
-    float speed_factor = 1.0f;
-    if (strcmp(tokenizer.field(4), "N") == 0) {
-        speed_factor = 0.514444f;
-    } else if (strcmp(tokenizer.field(4), "M") == 0) {
-        speed_factor = 1.0f;
-    } else if (strcmp(tokenizer.field(4), "K") == 0) {
-        speed_factor = 1000.0f / 3600.0f;
-    } else {
-        return false;
-    }
-
-    wind.angle_apparent_rad = angle_deg * 3.14159265358979323846f / 180.0f;
-    wind.speed_apparent_m_s = speed_value * speed_factor;
-    wind.last_update_us = now_us;
-    wind.valid = true;
-    return true;
 }
 
 static TcpLineServerOptions make_signalk_options() {
@@ -233,20 +143,9 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
         connection.close();
     }
 
-    void broadcast_wind_update(const WindState& wind) {
-        if (!wind.valid) {
-            return;
-        }
-
+    void broadcast_wind_update(const DataModel<Real>& data_model) {
         char json[512];
-        const int len = snprintf(
-            json,
-            sizeof(json),
-            "{\"updates\":[{\"source\":{\"label\":\"mini-signalk\"},"
-            "\"values\":[{\"path\":\"environment.wind.angleApparent\",\"value\":%.6f},"
-            "{\"path\":\"environment.wind.speedApparent\",\"value\":%.6f}]}]}\n",
-            static_cast<double>(wind.angle_apparent_rad),
-            static_cast<double>(wind.speed_apparent_m_s));
+        const int len = format_signalk_wind_update(data_model, json, sizeof(json));
         if (len <= 0 || len >= static_cast<int>(sizeof(json))) {
             return;
         }
@@ -263,7 +162,7 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
 
     SignalKCallbacks& signalk;
     TcpConnectionRegistry<4> sources;
-    WindState wind;
+    DataModel<Real> data_model;
     int accepted = 0;
     int updates = 0;
 
@@ -294,20 +193,20 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
             return;
         }
 
-        if (!parse_mwv(tokenizer, wind, event_loop.clock().micros())) {
+        if (!parse_mwv(tokenizer, data_model, event_loop.clock().micros())) {
             return;
         }
 
         ++updates;
         print_text("NMEA MWV update angle_rad=");
-        print_float(wind.angle_apparent_rad);
+        print_float(data_model.apparent_wind_direction_rad.value);
         print_text(" speed_m_s=");
-        print_float(wind.speed_apparent_m_s);
+        print_float(data_model.apparent_wind_speed_m_s.value);
         print_text(" SignalK clients=");
         print_size(signalk.clients.size());
         print_text("\n");
 
-        signalk.broadcast_wind_update(wind);
+        signalk.broadcast_wind_update(data_model);
     }
 
     void on_close(ITcpConnection& connection) override {

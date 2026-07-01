@@ -167,11 +167,7 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
         line_to_cstr(line, text);
 
         NmeaTokenizer tokenizer;
-        if (!tokenizer.tokenize(text)) {
-            return;
-        }
-
-        if (!parse_mwv(tokenizer, data_model, event_loop.clock().micros())) {
+        if (!tokenizer.tokenize(text) || !parse_mwv(tokenizer, data_model, event_loop.clock().micros())) {
             return;
         }
 

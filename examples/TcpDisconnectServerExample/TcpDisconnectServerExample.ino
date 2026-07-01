@@ -41,12 +41,29 @@ static void print_number(uint16_t value) {
 #endif
 }
 
+static void print_size(size_t value) {
+#if defined(ARDUINO)
+    Serial.print(static_cast<unsigned long>(value));
+#else
+    std::cout << value;
+#endif
+}
+
 struct DisconnectHandler final : public ITcpServerHandler {
+    TcpConnectionRegistry<8> connections;
+
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
+        if (!connections.add(connection)) {
+            print_text("too many clients\n");
+            connection.close();
+            return;
+        }
         print_text("accepted ");
         print_text(peer.host);
         print_text(":");
         print_number(peer.port);
+        print_text(" active=");
+        print_size(connections.size());
         print_text("\n");
         const char greeting[] = "connected; close the client to test disconnect detection\n";
         connection.write(reinterpret_cast<const uint8_t*>(greeting), sizeof(greeting) - 1);
@@ -64,17 +81,22 @@ struct DisconnectHandler final : public ITcpServerHandler {
     }
 
     void on_close(ITcpConnection& connection) override {
+        connections.remove(connection);
         print_text("peer disconnected ");
         print_text(connection.peer().host);
         print_text(":");
         print_number(connection.peer().port);
+        print_text(" active=");
+        print_size(connections.size());
         print_text("\n");
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
-        (void)connection;
         (void)error_code;
-        print_text("connection error\n");
+        connections.remove(connection);
+        print_text("connection error active=");
+        print_size(connections.size());
+        print_text("\n");
     }
 
     void on_listener_error(int error_code) override {

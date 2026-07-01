@@ -13,27 +13,31 @@
 
 namespace {
 
-constexpr double knots_to_m_s = 0.514444;
-constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
-constexpr int max_sentences_before_disconnect = 2048;
-constexpr size_t backpressure_limit_bytes = 32768;
-
+template<typename Real = float>
 struct DataValue {
-    double value = 0.0;
+    Real value = Real(0);
     uint64_t last_update_us = 0;
     bool valid = false;
 
-    void set(double new_value, uint64_t now_us) {
+    void set(Real new_value, uint64_t now_us) {
         value = new_value;
         last_update_us = now_us;
         valid = true;
     }
 };
 
+template<typename Real = float>
 struct DataModel {
-    DataValue apparent_wind_direction_rad;
-    DataValue apparent_wind_speed_m_s;
+    DataValue<Real> apparent_wind_direction_rad;
+    DataValue<Real> apparent_wind_speed_m_s;
 };
+
+using Real = float;
+
+constexpr Real knots_to_m_s = Real(0.514444);
+constexpr Real deg_to_rad = Real(3.14159265358979323846) / Real(180);
+constexpr int max_sentences_before_disconnect = 2048;
+constexpr size_t backpressure_limit_bytes = 32768;
 
 bool view_contains(async_event_loop::JsonView view, const char* needle) {
     const size_t needle_len = std::strlen(needle);
@@ -67,7 +71,7 @@ struct JsonCapture {
           }) {}
 };
 
-bool parse_mwv(async_event_loop::LineView line, DataModel& model, uint64_t now_us) {
+bool parse_mwv(async_event_loop::LineView line, DataModel<Real>& model, uint64_t now_us) {
     char text[128];
     async_event_loop::line_to_cstr(line, text);
 
@@ -93,19 +97,19 @@ bool parse_mwv(async_event_loop::LineView line, DataModel& model, uint64_t now_u
 
     char* end_angle = nullptr;
     char* end_speed = nullptr;
-    const double angle_deg = std::strtod(fields[1], &end_angle);
-    const double speed_value = std::strtod(fields[3], &end_speed);
+    const Real angle_deg = static_cast<Real>(std::strtod(fields[1], &end_angle));
+    const Real speed_value = static_cast<Real>(std::strtod(fields[3], &end_speed));
     if (end_angle == fields[1] || end_speed == fields[3]) {
         return false;
     }
 
-    double factor = 1.0;
+    Real factor = Real(1);
     if (std::strcmp(fields[4], "N") == 0) {
         factor = knots_to_m_s;
     } else if (std::strcmp(fields[4], "M") == 0) {
-        factor = 1.0;
+        factor = Real(1);
     } else if (std::strcmp(fields[4], "K") == 0) {
-        factor = 1000.0 / 3600.0;
+        factor = Real(1000) / Real(3600);
     } else {
         return false;
     }
@@ -119,7 +123,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
     explicit WindSignalKServer(async_event_loop::EventLoop<>& loop) : event_loop(loop) {}
 
     async_event_loop::EventLoop<>& event_loop;
-    DataModel data_model;
+    DataModel<Real> data_model;
     async_event_loop::ITcpConnection* connections[8]{};
     int accepted = 0;
     int closed = 0;
@@ -155,8 +159,8 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             "{\"updates\":[{\"source\":{\"label\":\"pypilot-event-loop-test\"},"
             "\"values\":[{\"path\":\"environment.wind.angleApparent\",\"value\":%.6f},"
             "{\"path\":\"environment.wind.speedApparent\",\"value\":%.6f}]}]}\n",
-            data_model.apparent_wind_direction_rad.value,
-            data_model.apparent_wind_speed_m_s.value);
+            static_cast<double>(data_model.apparent_wind_direction_rad.value),
+            static_cast<double>(data_model.apparent_wind_speed_m_s.value));
         assert(len > 0 && len < static_cast<int>(sizeof(json)));
 
         for (int i = 0; i < accepted; ++i) {

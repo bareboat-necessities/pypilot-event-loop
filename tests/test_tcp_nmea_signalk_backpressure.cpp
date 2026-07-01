@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cerrno>
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -16,6 +17,23 @@ constexpr double knots_to_m_s = 0.514444;
 constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
 constexpr int max_sentences_before_disconnect = 2048;
 constexpr size_t backpressure_limit_bytes = 32768;
+
+struct DataValue {
+    double value = 0.0;
+    uint64_t last_update_us = 0;
+    bool valid = false;
+
+    void set(double new_value, uint64_t now_us) {
+        value = new_value;
+        last_update_us = now_us;
+        valid = true;
+    }
+};
+
+struct DataModel {
+    DataValue apparent_wind_direction_rad;
+    DataValue apparent_wind_speed_m_s;
+};
 
 bool view_contains(async_event_loop::JsonView view, const char* needle) {
     const size_t needle_len = std::strlen(needle);
@@ -49,7 +67,7 @@ struct JsonCapture {
           }) {}
 };
 
-bool parse_mwv(async_event_loop::LineView line, double& angle_rad, double& speed_m_s) {
+bool parse_mwv(async_event_loop::LineView line, DataModel& model, uint64_t now_us) {
     char text[128];
     async_event_loop::line_to_cstr(line, text);
 
@@ -92,12 +110,16 @@ bool parse_mwv(async_event_loop::LineView line, double& angle_rad, double& speed
         return false;
     }
 
-    angle_rad = angle_deg * deg_to_rad;
-    speed_m_s = speed_value * factor;
+    model.apparent_wind_direction_rad.set(angle_deg * deg_to_rad, now_us);
+    model.apparent_wind_speed_m_s.set(speed_value * factor, now_us);
     return true;
 }
 
 struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler {
+    explicit WindSignalKServer(async_event_loop::EventLoop<>& loop) : event_loop(loop) {}
+
+    async_event_loop::EventLoop<>& event_loop;
+    DataModel data_model;
     async_event_loop::ITcpConnection* connections[8]{};
     int accepted = 0;
     int closed = 0;
@@ -116,11 +138,14 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
 
     void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
         (void)connection;
-        double angle_rad = 0.0;
-        double speed_m_s = 0.0;
-        if (!parse_mwv(line, angle_rad, speed_m_s)) {
+        const uint64_t now_us = event_loop.clock().micros();
+        if (!parse_mwv(line, data_model, now_us)) {
             return;
         }
+        assert(data_model.apparent_wind_direction_rad.valid);
+        assert(data_model.apparent_wind_speed_m_s.valid);
+        assert(data_model.apparent_wind_direction_rad.last_update_us == now_us);
+        assert(data_model.apparent_wind_speed_m_s.last_update_us == now_us);
         ++nmea_messages;
 
         char json[512];
@@ -130,8 +155,8 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             "{\"updates\":[{\"source\":{\"label\":\"pypilot-event-loop-test\"},"
             "\"values\":[{\"path\":\"environment.wind.angleApparent\",\"value\":%.6f},"
             "{\"path\":\"environment.wind.speedApparent\",\"value\":%.6f}]}]}\n",
-            angle_rad,
-            speed_m_s);
+            data_model.apparent_wind_direction_rad.value,
+            data_model.apparent_wind_speed_m_s.value);
         assert(len > 0 && len < static_cast<int>(sizeof(json)));
 
         for (int i = 0; i < accepted; ++i) {
@@ -276,7 +301,7 @@ int main() {
     async_event_loop::EventLoop<> event_loop;
     assert(event_loop.valid());
 
-    WindSignalKServer app;
+    WindSignalKServer app(event_loop);
     async_event_loop::TcpLineServerHandler<160, 8> line_server(app);
     async_event_loop::NativeTcpServer server(event_loop.scheduler());
 
@@ -301,11 +326,16 @@ int main() {
     drain_plain_client(nmea_fd);
     assert(app.nmea_messages == 1);
     assert(app.json_broadcasts == 1);
+    assert(app.data_model.apparent_wind_direction_rad.valid);
+    assert(app.data_model.apparent_wind_speed_m_s.valid);
+    assert(app.data_model.apparent_wind_direction_rad.last_update_us ==
+           app.data_model.apparent_wind_speed_m_s.last_update_us);
     assert(fast_json.saw_angle_path);
     assert(fast_json.saw_speed_path);
     assert(fast_json.saw_angle_value);
     assert(fast_json.saw_speed_value);
 
+    const uint64_t first_update_us = app.data_model.apparent_wind_direction_rad.last_update_us;
     for (int i = 0; i < max_sentences_before_disconnect && app.backpressure_disconnects == 0; ++i) {
         write_all(event_loop, nmea_fd, sentence);
         pump(event_loop, 2);
@@ -316,12 +346,15 @@ int main() {
     assert(app.backpressure_error_logged);
     assert(app.max_first_client_output > backpressure_limit_bytes);
     assert(app.connections[0] == nullptr);
+    assert(app.data_model.apparent_wind_direction_rad.last_update_us >= first_update_us);
+    assert(app.data_model.apparent_wind_speed_m_s.last_update_us >= first_update_us);
 
     pump(event_loop, 100);
     assert(server.connection_count() == 2);
 
     const int messages_before = fast_json.messages;
     const int broadcasts_before = app.json_broadcasts;
+    const uint64_t before_continue_update_us = app.data_model.apparent_wind_speed_m_s.last_update_us;
     for (int i = 0; i < 8; ++i) {
         write_all(event_loop, nmea_fd, sentence);
         pump(event_loop, 2);
@@ -329,6 +362,8 @@ int main() {
         drain_plain_client(nmea_fd);
     }
     assert(app.json_broadcasts >= broadcasts_before + 8);
+    assert(app.data_model.apparent_wind_direction_rad.last_update_us >= before_continue_update_us);
+    assert(app.data_model.apparent_wind_speed_m_s.last_update_us >= before_continue_update_us);
     wait_for_json(event_loop, fast_fd, fast_json, messages_before + 8);
 
     close(nmea_fd);

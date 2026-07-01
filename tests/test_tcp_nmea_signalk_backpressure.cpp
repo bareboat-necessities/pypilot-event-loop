@@ -71,45 +71,74 @@ struct JsonCapture {
           }) {}
 };
 
-bool parse_mwv(char* text, DataModel<Real>& model, uint64_t now_us) {
-    if (!text) {
+class NmeaTokenizer {
+public:
+    static constexpr int max_fields = 8;
+
+    bool tokenize(char* text) {
+        reset();
+        if (!text) {
+            return false;
+        }
+
+        char* save = nullptr;
+        for (char* token = strtok_r(text, ",", &save);
+             token && field_count_ < max_fields;
+             token = strtok_r(nullptr, ",", &save)) {
+            fields_[field_count_++] = token;
+        }
+        return field_count_ > 0;
+    }
+
+    int field_count() const { return field_count_; }
+
+    const char* field(int index) const {
+        if (index < 0 || index >= field_count_) {
+            return "";
+        }
+        return fields_[index];
+    }
+
+private:
+    void reset() {
+        for (int i = 0; i < max_fields; ++i) {
+            fields_[i] = nullptr;
+        }
+        field_count_ = 0;
+    }
+
+    char* fields_[max_fields]{};
+    int field_count_ = 0;
+};
+
+bool parse_mwv(const NmeaTokenizer& tokenizer, DataModel<Real>& model, uint64_t now_us) {
+    if (tokenizer.field_count() < 6 || std::strlen(tokenizer.field(0)) < 6) {
+        return false;
+    }
+    const char* sentence = tokenizer.field(0) + std::strlen(tokenizer.field(0)) - 3;
+    if (std::strcmp(sentence, "MWV") != 0 || std::strcmp(tokenizer.field(2), "R") != 0) {
+        return false;
+    }
+    if (tokenizer.field(5)[0] != 'A') {
         return false;
     }
 
-    char* fields[8]{};
-    int field_count = 0;
-    char* save = nullptr;
-    for (char* token = strtok_r(text, ",", &save);
-         token && field_count < static_cast<int>(sizeof(fields) / sizeof(fields[0]));
-         token = strtok_r(nullptr, ",", &save)) {
-        fields[field_count++] = token;
-    }
-
-    if (field_count < 6 || std::strlen(fields[0]) < 6) {
-        return false;
-    }
-    const char* sentence = fields[0] + std::strlen(fields[0]) - 3;
-    if (std::strcmp(sentence, "MWV") != 0 || std::strcmp(fields[2], "R") != 0) {
-        return false;
-    }
-    if (fields[5][0] != 'A') {
-        return false;
-    }
-
+    const char* angle_field = tokenizer.field(1);
+    const char* speed_field = tokenizer.field(3);
     char* end_angle = nullptr;
     char* end_speed = nullptr;
-    const Real angle_deg = static_cast<Real>(std::strtod(fields[1], &end_angle));
-    const Real speed_value = static_cast<Real>(std::strtod(fields[3], &end_speed));
-    if (end_angle == fields[1] || end_speed == fields[3]) {
+    const Real angle_deg = static_cast<Real>(std::strtod(angle_field, &end_angle));
+    const Real speed_value = static_cast<Real>(std::strtod(speed_field, &end_speed));
+    if (end_angle == angle_field || end_speed == speed_field) {
         return false;
     }
 
     Real factor = Real(1);
-    if (std::strcmp(fields[4], "N") == 0) {
+    if (std::strcmp(tokenizer.field(4), "N") == 0) {
         factor = knots_to_m_s;
-    } else if (std::strcmp(fields[4], "M") == 0) {
+    } else if (std::strcmp(tokenizer.field(4), "M") == 0) {
         factor = Real(1);
-    } else if (std::strcmp(fields[4], "K") == 0) {
+    } else if (std::strcmp(tokenizer.field(4), "K") == 0) {
         factor = Real(1000) / Real(3600);
     } else {
         return false;
@@ -147,8 +176,13 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
         char text[128];
         async_event_loop::line_to_cstr(line, text);
 
+        NmeaTokenizer tokenizer;
+        if (!tokenizer.tokenize(text)) {
+            return;
+        }
+
         const uint64_t now_us = event_loop.clock().micros();
-        if (!parse_mwv(text, data_model, now_us)) {
+        if (!parse_mwv(tokenizer, data_model, now_us)) {
             return;
         }
         assert(data_model.apparent_wind_direction_rad.valid);

@@ -10,12 +10,9 @@
 #ifndef PYPILOT_WIFI_CONNECT_TIMEOUT_MS
 #define PYPILOT_WIFI_CONNECT_TIMEOUT_MS 15000UL
 #endif
-#else
-#include <iostream>
 #endif
 
 #include <stdint.h>
-#include <stdio.h>
 
 #include <async_event_loop.hpp>
 #include "../support/mini_signalk_support.hpp"
@@ -26,6 +23,10 @@ using async_event_loop_examples::NmeaTokenizer;
 using async_event_loop_examples::Real;
 using async_event_loop_examples::format_signalk_wind_update;
 using async_event_loop_examples::parse_mwv;
+using async_event_loop_examples::print_float;
+using async_event_loop_examples::print_number;
+using async_event_loop_examples::print_size;
+using async_event_loop_examples::print_text;
 
 // Mini bridge layout:
 //   * Signal K clients connect to signalk_port and receive newline-delimited JSON updates.
@@ -42,36 +43,6 @@ static NativeTcpServer nmea_server(event_loop.scheduler());
 #if defined(ARDUINO)
 static bool setup_failed = false;
 #endif
-
-static void print_text(const char* text) {
-#if defined(ARDUINO)
-    Serial.print(text);
-#else
-    std::cout << text;
-#endif
-}
-
-static void print_number(uint16_t value) {
-#if defined(ARDUINO)
-    Serial.print(value);
-#else
-    std::cout << value;
-#endif
-}
-
-static void print_size(size_t value) {
-#if defined(ARDUINO)
-    Serial.print(static_cast<unsigned long>(value));
-#else
-    std::cout << value;
-#endif
-}
-
-static void print_float(float value) {
-    char text[32];
-    snprintf(text, sizeof(text), "%.3f", static_cast<double>(value));
-    print_text(text);
-}
 
 static TcpLineServerOptions make_signalk_options() {
     TcpLineServerOptions options;

@@ -23,10 +23,16 @@ using async_event_loop_examples::NmeaTokenizer;
 using async_event_loop_examples::Real;
 using async_event_loop_examples::format_signalk_wind_update;
 using async_event_loop_examples::parse_mwv;
-using async_event_loop_examples::print_float;
-using async_event_loop_examples::print_number;
-using async_event_loop_examples::print_size;
-using async_event_loop_examples::print_text;
+using async_event_loop_examples::print_active_line;
+using async_event_loop_examples::print_error_active_line;
+using async_event_loop_examples::print_error_line;
+using async_event_loop_examples::print_label_line;
+using async_event_loop_examples::print_line;
+using async_event_loop_examples::print_listening_line;
+using async_event_loop_examples::print_peer_active_line;
+using async_event_loop_examples::print_pending_line;
+using async_event_loop_examples::print_port_line;
+using async_event_loop_examples::print_wind_status_line;
 
 // Mini bridge layout:
 //   * Signal K clients connect to signalk_port and receive newline-delimited JSON updates.
@@ -68,32 +74,24 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
 
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
         if (!clients.add(connection)) {
-            print_text("too many Signal K clients\n");
+            print_line("too many Signal K clients");
             connection.close();
             return;
         }
         ++accepted;
-        print_text("Signal K client accepted ");
-        print_text(peer.host);
-        print_text(":");
-        print_number(peer.port);
-        print_text(" active=");
-        print_size(clients.size());
-        print_text("\n");
+        print_peer_active_line("Signal K client accepted ", peer.host, peer.port, clients.size());
     }
 
     void on_line(ITcpConnection& connection, LineView line) override {
         (void)connection;
         (void)line;
         ++incoming_lines;
-        print_text("Signal K input line ignored\n");
+        print_line("Signal K input line ignored");
     }
 
     void on_backpressure(ITcpConnection& connection, const TcpBackpressureInfo& info) override {
         ++backpressure_disconnects;
-        print_text("Signal K backpressure close pending=");
-        print_size(info.pending_bytes);
-        print_text("\n");
+        print_pending_line("Signal K backpressure close pending=", info.pending_bytes);
 
         // The line handler will close the connection after this callback when
         // close_on_limit is true. The application registry is updated here so
@@ -103,28 +101,20 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
 
     void on_close(ITcpConnection& connection) override {
         clients.remove(connection);
-        print_text("Signal K client closed active=");
-        print_size(clients.size());
-        print_text("\n");
+        print_active_line("Signal K client closed active=", clients.size());
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
         clients.remove(connection);
-        print_text("Signal K client error code=");
-        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
-        print_text(" active=");
-        print_size(clients.size());
-        print_text("\n");
+        print_error_active_line("Signal K client error code=", error_code, clients.size());
     }
 
     void on_listener_error(int error_code) override {
-        print_text("Signal K listener error code=");
-        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
-        print_text("\n");
+        print_error_line("Signal K listener error code=", error_code);
     }
 
     void on_too_many_connections(ITcpConnection& connection) override {
-        print_text("Signal K line handler full\n");
+        print_line("Signal K line handler full");
         connection.close();
     }
 
@@ -157,18 +147,12 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
 
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
         if (!sources.add(connection)) {
-            print_text("too many NMEA sources\n");
+            print_line("too many NMEA sources");
             connection.close();
             return;
         }
         ++accepted;
-        print_text("NMEA source accepted ");
-        print_text(peer.host);
-        print_text(":");
-        print_number(peer.port);
-        print_text(" active=");
-        print_size(sources.size());
-        print_text("\n");
+        print_peer_active_line("NMEA source accepted ", peer.host, peer.port, sources.size());
     }
 
     void on_line(ITcpConnection& connection, LineView line) override {
@@ -189,41 +173,26 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
         }
 
         ++updates;
-        print_text("NMEA MWV update angle_rad=");
-        print_float(data_model.apparent_wind_direction_rad.value);
-        print_text(" speed_m_s=");
-        print_float(data_model.apparent_wind_speed_m_s.value);
-        print_text(" SignalK clients=");
-        print_size(signalk.clients.size());
-        print_text("\n");
-
+        print_wind_status_line(data_model, signalk.clients.size());
         signalk.broadcast_wind_update(data_model);
     }
 
     void on_close(ITcpConnection& connection) override {
         sources.remove(connection);
-        print_text("NMEA source closed active=");
-        print_size(sources.size());
-        print_text("\n");
+        print_active_line("NMEA source closed active=", sources.size());
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
         sources.remove(connection);
-        print_text("NMEA source error code=");
-        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
-        print_text(" active=");
-        print_size(sources.size());
-        print_text("\n");
+        print_error_active_line("NMEA source error code=", error_code, sources.size());
     }
 
     void on_listener_error(int error_code) override {
-        print_text("NMEA listener error code=");
-        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
-        print_text("\n");
+        print_error_line("NMEA listener error code=", error_code);
     }
 
     void on_too_many_connections(ITcpConnection& connection) override {
-        print_text("NMEA line handler full\n");
+        print_line("NMEA line handler full");
         connection.close();
     }
 };
@@ -245,15 +214,11 @@ static bool listen_server(NativeTcpServer& tcp_server,
     options.reuse_address = true;
 
     if (!tcp_server.listen(options, handler)) {
-        print_text(label);
-        print_text(" listen failed\n");
+        print_label_line(label, " listen failed");
         return false;
     }
 
-    print_text(label);
-    print_text(" listening on port ");
-    print_number(tcp_server.port());
-    print_text("\n");
+    print_listening_line(label, tcp_server.port());
     return true;
 }
 
@@ -265,8 +230,7 @@ static bool setup_example() {
         PYPILOT_WIFI_CONNECT_TIMEOUT_MS
     );
     if (wifi_result != WiFiConnectResult::Connected) {
-        print_text(wifi_connect_result_text(wifi_result));
-        print_text("\n");
+        print_line(wifi_connect_result_text(wifi_result));
         return false;
     }
 #endif
@@ -281,13 +245,9 @@ static bool setup_example() {
         return false;
     }
 
-    print_text("MiniSignalK bridge ready\n");
-    print_text("connect Signal K clients to port ");
-    print_number(signalk_port);
-    print_text("\n");
-    print_text("send NMEA MWV to port ");
-    print_number(nmea_port);
-    print_text(", for example: $IIMWV,045.0,R,12.3,N,A*00\n");
+    print_line("MiniSignalK bridge ready");
+    print_port_line("connect Signal K clients to port ", signalk_port);
+    print_port_line("send NMEA MWV to port ", nmea_port, ", for example: $IIMWV,045.0,R,12.3,N,A*00");
     return true;
 }
 
@@ -295,14 +255,14 @@ static bool setup_example() {
 void setup() {
     Serial.begin(115200);
     if (!setup_example()) {
-        print_text("MiniSignalK setup failed\n");
+        print_line("MiniSignalK setup failed");
         setup_failed = true;
     }
 }
 
 void loop() {
     if (setup_failed) {
-        print_text("MiniSignalK setup failed\n");
+        print_line("MiniSignalK setup failed");
         delay(1000);
         return;
     }

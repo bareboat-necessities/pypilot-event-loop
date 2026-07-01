@@ -23,16 +23,9 @@ using async_event_loop_examples::NmeaTokenizer;
 using async_event_loop_examples::Real;
 using async_event_loop_examples::format_signalk_wind_update;
 using async_event_loop_examples::parse_mwv;
-using async_event_loop_examples::print_active_line;
-using async_event_loop_examples::print_error_active_line;
-using async_event_loop_examples::print_error_line;
-using async_event_loop_examples::print_label_line;
+using async_event_loop_examples::print_format_line;
 using async_event_loop_examples::print_line;
-using async_event_loop_examples::print_listening_line;
-using async_event_loop_examples::print_peer_active_line;
-using async_event_loop_examples::print_pending_line;
-using async_event_loop_examples::print_port_line;
-using async_event_loop_examples::print_wind_status_line;
+using async_event_loop_examples::printable_error_code;
 
 // Mini bridge layout:
 //   * Signal K clients connect to signalk_port and receive newline-delimited JSON updates.
@@ -79,7 +72,10 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
             return;
         }
         ++accepted;
-        print_peer_active_line("Signal K client accepted ", peer.host, peer.port, clients.size());
+        print_format_line("Signal K client accepted %s:%u active=%lu",
+                          peer.host ? peer.host : "",
+                          peer.port,
+                          static_cast<unsigned long>(clients.size()));
     }
 
     void on_line(ITcpConnection& connection, LineView line) override {
@@ -91,7 +87,8 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
 
     void on_backpressure(ITcpConnection& connection, const TcpBackpressureInfo& info) override {
         ++backpressure_disconnects;
-        print_pending_line("Signal K backpressure close pending=", info.pending_bytes);
+        print_format_line("Signal K backpressure close pending=%lu",
+                          static_cast<unsigned long>(info.pending_bytes));
 
         // The line handler will close the connection after this callback when
         // close_on_limit is true. The application registry is updated here so
@@ -101,16 +98,19 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
 
     void on_close(ITcpConnection& connection) override {
         clients.remove(connection);
-        print_active_line("Signal K client closed active=", clients.size());
+        print_format_line("Signal K client closed active=%lu",
+                          static_cast<unsigned long>(clients.size()));
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
         clients.remove(connection);
-        print_error_active_line("Signal K client error code=", error_code, clients.size());
+        print_format_line("Signal K client error code=%u active=%lu",
+                          printable_error_code(error_code),
+                          static_cast<unsigned long>(clients.size()));
     }
 
     void on_listener_error(int error_code) override {
-        print_error_line("Signal K listener error code=", error_code);
+        print_format_line("Signal K listener error code=%u", printable_error_code(error_code));
     }
 
     void on_too_many_connections(ITcpConnection& connection) override {
@@ -152,7 +152,10 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
             return;
         }
         ++accepted;
-        print_peer_active_line("NMEA source accepted ", peer.host, peer.port, sources.size());
+        print_format_line("NMEA source accepted %s:%u active=%lu",
+                          peer.host ? peer.host : "",
+                          peer.port,
+                          static_cast<unsigned long>(sources.size()));
     }
 
     void on_line(ITcpConnection& connection, LineView line) override {
@@ -173,22 +176,27 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
         }
 
         ++updates;
-        print_wind_status_line(data_model, signalk.clients.size());
+        print_format_line("NMEA MWV update angle_rad=%.3f speed_m_s=%.3f SignalK clients=%lu",
+                          static_cast<double>(data_model.apparent_wind_direction_rad.value),
+                          static_cast<double>(data_model.apparent_wind_speed_m_s.value),
+                          static_cast<unsigned long>(signalk.clients.size()));
         signalk.broadcast_wind_update(data_model);
     }
 
     void on_close(ITcpConnection& connection) override {
         sources.remove(connection);
-        print_active_line("NMEA source closed active=", sources.size());
+        print_format_line("NMEA source closed active=%lu", static_cast<unsigned long>(sources.size()));
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
         sources.remove(connection);
-        print_error_active_line("NMEA source error code=", error_code, sources.size());
+        print_format_line("NMEA source error code=%u active=%lu",
+                          printable_error_code(error_code),
+                          static_cast<unsigned long>(sources.size()));
     }
 
     void on_listener_error(int error_code) override {
-        print_error_line("NMEA listener error code=", error_code);
+        print_format_line("NMEA listener error code=%u", printable_error_code(error_code));
     }
 
     void on_too_many_connections(ITcpConnection& connection) override {
@@ -214,11 +222,11 @@ static bool listen_server(NativeTcpServer& tcp_server,
     options.reuse_address = true;
 
     if (!tcp_server.listen(options, handler)) {
-        print_label_line(label, " listen failed");
+        print_format_line("%s listen failed", label);
         return false;
     }
 
-    print_listening_line(label, tcp_server.port());
+    print_format_line("%s listening on port %u", label, tcp_server.port());
     return true;
 }
 
@@ -246,8 +254,8 @@ static bool setup_example() {
     }
 
     print_line("MiniSignalK bridge ready");
-    print_port_line("connect Signal K clients to port ", signalk_port);
-    print_port_line("send NMEA MWV to port ", nmea_port, ", for example: $IIMWV,045.0,R,12.3,N,A*00");
+    print_format_line("connect Signal K clients to port %u", signalk_port);
+    print_format_line("send NMEA MWV to port %u, for example: $IIMWV,045.0,R,12.3,N,A*00", nmea_port);
     return true;
 }
 

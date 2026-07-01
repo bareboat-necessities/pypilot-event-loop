@@ -1,5 +1,11 @@
 #pragma once
 
+#if defined(ARDUINO)
+#include <Arduino.h>
+#else
+#include <iostream>
+#endif
+
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -7,6 +13,36 @@
 #include <string.h>
 
 namespace async_event_loop_examples {
+
+inline void print_text(const char* text) {
+#if defined(ARDUINO)
+    Serial.print(text);
+#else
+    std::cout << text;
+#endif
+}
+
+inline void print_number(uint16_t value) {
+#if defined(ARDUINO)
+    Serial.print(value);
+#else
+    std::cout << value;
+#endif
+}
+
+inline void print_size(size_t value) {
+#if defined(ARDUINO)
+    Serial.print(static_cast<unsigned long>(value));
+#else
+    std::cout << value;
+#endif
+}
+
+inline void print_float(float value) {
+    char text[32];
+    snprintf(text, sizeof(text), "%.3f", static_cast<double>(value));
+    print_text(text);
+}
 
 template<typename Real = float>
 struct DataValue {

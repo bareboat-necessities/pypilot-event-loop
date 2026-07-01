@@ -215,7 +215,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             if (i == 0 && pending > max_first_client_output) {
                 max_first_client_output = pending;
             }
-            if (pending > backpressure_limit_bytes) {
+            if (i == 0 && pending > backpressure_limit_bytes) {
                 std::fprintf(stderr,
                              "backpressure: disconnecting client %d with %zu queued bytes\n",
                              i,

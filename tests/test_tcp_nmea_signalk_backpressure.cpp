@@ -1,6 +1,5 @@
 #include <cassert>
 #include <cerrno>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -56,9 +55,9 @@ bool parse_mwv(async_event_loop::LineView line, double& angle_rad, double& speed
     char* fields[8]{};
     int field_count = 0;
     char* save = nullptr;
-    for (char* token = std::strtok_r(text, ",", &save);
+    for (char* token = strtok_r(text, ",", &save);
          token && field_count < static_cast<int>(sizeof(fields) / sizeof(fields[0]));
-         token = std::strtok_r(nullptr, ",", &save)) {
+         token = strtok_r(nullptr, ",", &save)) {
         fields[field_count++] = token;
     }
 

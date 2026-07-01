@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 
 #include "async_event_loop.hpp"

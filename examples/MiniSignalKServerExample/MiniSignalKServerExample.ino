@@ -23,8 +23,12 @@
 
 using namespace async_event_loop;
 
+static constexpr uint16_t signalk_port = 20223;
+static constexpr uint16_t nmea_port = 20224;
+
 static EventLoop<> event_loop;
-static NativeTcpServer server(event_loop.scheduler());
+static NativeTcpServer signalk_server(event_loop.scheduler());
+static NativeTcpServer nmea_server(event_loop.scheduler());
 
 #if defined(ARDUINO)
 static bool setup_failed = false;
@@ -154,7 +158,7 @@ static bool parse_mwv(const NmeaTokenizer& tokenizer, WindState& wind, uint64_t 
     return true;
 }
 
-static TcpLineServerOptions make_line_options() {
+static TcpLineServerOptions make_signalk_options() {
     TcpLineServerOptions options;
 #if defined(ARDUINO)
     options.backpressure = TcpBackpressureOptions::embedded_default();
@@ -164,26 +168,118 @@ static TcpLineServerOptions make_line_options() {
     return options;
 }
 
-struct MiniSignalKCallbacks final : public ITcpLineServerHandler {
-    TcpConnectionRegistry<8> connections;
-    WindState wind;
+struct SignalKCallbacks final : public ITcpLineServerHandler {
+    TcpConnectionRegistry<8> clients;
     int accepted = 0;
-    int updates = 0;
+    int incoming_lines = 0;
+    int broadcasts = 0;
     int backpressure_disconnects = 0;
 
     void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
-        if (!connections.add(connection)) {
-            print_text("too many MiniSignalK clients\n");
+        if (!clients.add(connection)) {
+            print_text("too many Signal K clients\n");
             connection.close();
             return;
         }
         ++accepted;
-        print_text("MiniSignalK accepted ");
+        print_text("Signal K client accepted ");
         print_text(peer.host);
         print_text(":");
         print_number(peer.port);
         print_text(" active=");
-        print_size(connections.size());
+        print_size(clients.size());
+        print_text("\n");
+    }
+
+    void on_line(ITcpConnection& connection, LineView line) override {
+        (void)connection;
+        (void)line;
+        ++incoming_lines;
+        print_text("Signal K input line ignored\n");
+    }
+
+    void on_backpressure(ITcpConnection& connection, const TcpBackpressureInfo& info) override {
+        ++backpressure_disconnects;
+        print_text("Signal K backpressure close pending=");
+        print_size(info.pending_bytes);
+        print_text("\n");
+        clients.remove(connection);
+    }
+
+    void on_close(ITcpConnection& connection) override {
+        clients.remove(connection);
+        print_text("Signal K client closed active=");
+        print_size(clients.size());
+        print_text("\n");
+    }
+
+    void on_error(ITcpConnection& connection, int error_code) override {
+        clients.remove(connection);
+        print_text("Signal K client error code=");
+        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
+        print_text(" active=");
+        print_size(clients.size());
+        print_text("\n");
+    }
+
+    void on_listener_error(int error_code) override {
+        print_text("Signal K listener error code=");
+        print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
+        print_text("\n");
+    }
+
+    void on_too_many_connections(ITcpConnection& connection) override {
+        print_text("Signal K line handler full\n");
+        connection.close();
+    }
+
+    void broadcast_wind_update(const WindState& wind) {
+        if (!wind.valid) {
+            return;
+        }
+
+        char json[512];
+        const int len = snprintf(
+            json,
+            sizeof(json),
+            "{\"updates\":[{\"source\":{\"label\":\"mini-signalk\"},"
+            "\"values\":[{\"path\":\"environment.wind.angleApparent\",\"value\":%.6f},"
+            "{\"path\":\"environment.wind.speedApparent\",\"value\":%.6f}]}]}\n",
+            static_cast<double>(wind.angle_apparent_rad),
+            static_cast<double>(wind.speed_apparent_m_s));
+        if (len <= 0 || len >= static_cast<int>(sizeof(json))) {
+            return;
+        }
+
+        clients.for_each([&](ITcpConnection& peer) {
+            peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+        });
+        ++broadcasts;
+    }
+};
+
+struct NmeaCallbacks final : public ITcpLineServerHandler {
+    explicit NmeaCallbacks(SignalKCallbacks& sink) : signalk(sink) {}
+
+    SignalKCallbacks& signalk;
+    TcpConnectionRegistry<4> sources;
+    WindState wind;
+    int accepted = 0;
+    int updates = 0;
+
+    void on_accept(ITcpConnection& connection, const TcpPeerInfo& peer) override {
+        if (!sources.add(connection)) {
+            print_text("too many NMEA sources\n");
+            connection.close();
+            return;
+        }
+        ++accepted;
+        print_text("NMEA source accepted ");
+        print_text(peer.host);
+        print_text(":");
+        print_number(peer.port);
+        print_text(" active=");
+        print_size(sources.size());
         print_text("\n");
     }
 
@@ -203,80 +299,73 @@ struct MiniSignalKCallbacks final : public ITcpLineServerHandler {
         }
 
         ++updates;
-        print_text("MWV update angle_rad=");
+        print_text("NMEA MWV update angle_rad=");
         print_float(wind.angle_apparent_rad);
         print_text(" speed_m_s=");
         print_float(wind.speed_apparent_m_s);
-        print_text(" clients=");
-        print_size(connections.size());
+        print_text(" SignalK clients=");
+        print_size(signalk.clients.size());
         print_text("\n");
 
-        broadcast_wind_update();
-    }
-
-    void on_backpressure(ITcpConnection& connection, const TcpBackpressureInfo& info) override {
-        ++backpressure_disconnects;
-        print_text("MiniSignalK backpressure close pending=");
-        print_size(info.pending_bytes);
-        print_text("\n");
-        connections.remove(connection);
+        signalk.broadcast_wind_update(wind);
     }
 
     void on_close(ITcpConnection& connection) override {
-        connections.remove(connection);
-        print_text("MiniSignalK client closed active=");
-        print_size(connections.size());
+        sources.remove(connection);
+        print_text("NMEA source closed active=");
+        print_size(sources.size());
         print_text("\n");
     }
 
     void on_error(ITcpConnection& connection, int error_code) override {
-        connections.remove(connection);
-        print_text("MiniSignalK client error code=");
+        sources.remove(connection);
+        print_text("NMEA source error code=");
         print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
         print_text(" active=");
-        print_size(connections.size());
+        print_size(sources.size());
         print_text("\n");
     }
 
     void on_listener_error(int error_code) override {
-        print_text("MiniSignalK listener error code=");
+        print_text("NMEA listener error code=");
         print_number(static_cast<uint16_t>(error_code < 0 ? -error_code : error_code));
         print_text("\n");
     }
 
     void on_too_many_connections(ITcpConnection& connection) override {
-        print_text("MiniSignalK line handler full\n");
+        print_text("NMEA line handler full\n");
         connection.close();
-    }
-
-private:
-    void broadcast_wind_update() {
-        if (!wind.valid) {
-            return;
-        }
-
-        char json[512];
-        const int len = snprintf(
-            json,
-            sizeof(json),
-            "{\"updates\":[{\"source\":{\"label\":\"mini-signalk\"},"
-            "\"values\":[{\"path\":\"environment.wind.angleApparent\",\"value\":%.6f},"
-            "{\"path\":\"environment.wind.speedApparent\",\"value\":%.6f}]}]}\n",
-            static_cast<double>(wind.angle_apparent_rad),
-            static_cast<double>(wind.speed_apparent_m_s));
-        if (len <= 0 || len >= static_cast<int>(sizeof(json))) {
-            return;
-        }
-
-        connections.for_each([&](ITcpConnection& peer) {
-            peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
-        });
     }
 };
 
-static MiniSignalKCallbacks mini_signalk;
-static TcpLineServerOptions line_options = make_line_options();
-static TcpLineServerHandler<192, 8> line_handler(mini_signalk, line_options);
+static SignalKCallbacks signalk_callbacks;
+static NmeaCallbacks nmea_callbacks(signalk_callbacks);
+static TcpLineServerOptions signalk_options = make_signalk_options();
+static TcpLineServerOptions nmea_options;
+static TcpLineServerHandler<256, 8> signalk_handler(signalk_callbacks, signalk_options);
+static TcpLineServerHandler<192, 4> nmea_handler(nmea_callbacks, nmea_options);
+
+static bool listen_server(NativeTcpServer& tcp_server,
+                          ITcpServerHandler& handler,
+                          uint16_t port,
+                          const char* label) {
+    TcpListenOptions options;
+    options.host = "0.0.0.0";
+    options.port = port;
+    options.reuse_address = true;
+
+    if (!tcp_server.listen(options, handler)) {
+        print_text(label);
+        print_text(" listen failed\n");
+        return false;
+    }
+
+    print_text(label);
+    print_text(" listening on port ");
+    print_number(tcp_server.port());
+    print_text("\n");
+    return true;
+}
 
 static bool setup_example() {
 #if defined(ARDUINO)
@@ -292,19 +381,21 @@ static bool setup_example() {
     }
 #endif
 
-    TcpListenOptions options;
-    options.host = "0.0.0.0";
-    options.port = 20223;
-    options.reuse_address = true;
-
-    if (!server.listen(options, line_handler)) {
+    if (!listen_server(signalk_server, signalk_handler, signalk_port, "Signal K")) {
+        return false;
+    }
+    if (!listen_server(nmea_server, nmea_handler, nmea_port, "NMEA 0183")) {
+        signalk_server.close();
         return false;
     }
 
-    print_text("MiniSignalK TCP server listening on port ");
-    print_number(server.port());
+    print_text("MiniSignalK bridge ready\n");
+    print_text("connect Signal K clients to port ");
+    print_number(signalk_port);
     print_text("\n");
-    print_text("send NMEA MWV, for example: $IIMWV,045.0,R,12.3,N,A*00\n");
+    print_text("send NMEA MWV to port ");
+    print_number(nmea_port);
+    print_text(", for example: $IIMWV,045.0,R,12.3,N,A*00\n");
     return true;
 }
 

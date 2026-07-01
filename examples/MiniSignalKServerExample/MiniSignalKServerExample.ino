@@ -27,6 +27,11 @@ using async_event_loop_examples::Real;
 using async_event_loop_examples::format_signalk_wind_update;
 using async_event_loop_examples::parse_mwv;
 
+// Mini bridge layout:
+//   * Signal K clients connect to signalk_port and receive newline-delimited JSON updates.
+//   * NMEA 0183 producers connect to nmea_port and send line-delimited MWV sentences.
+// The two ports are intentionally separate so a stalled Signal K subscriber cannot block
+// or be confused with an NMEA input source.
 static constexpr uint16_t signalk_port = 20223;
 static constexpr uint16_t nmea_port = 20224;
 
@@ -71,13 +76,18 @@ static void print_float(float value) {
 static TcpLineServerOptions make_signalk_options() {
     TcpLineServerOptions options;
 #if defined(ARDUINO)
+    // Embedded WiFi clients have much smaller TCP output queues, so use the
+    // library's embedded backpressure threshold.
     options.backpressure = TcpBackpressureOptions::embedded_default();
 #else
+    // Linux/libevent can buffer more data, so use the server-side default.
     options.backpressure = TcpBackpressureOptions::server_default();
 #endif
     return options;
 }
 
+// Signal K side: accepts subscribers and broadcasts generated Signal K JSON.
+// It does not parse Signal K input yet; received lines are ignored in this minimal example.
 struct SignalKCallbacks final : public ITcpLineServerHandler {
     TcpConnectionRegistry<8> clients;
     int accepted = 0;
@@ -113,6 +123,10 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
         print_text("Signal K backpressure close pending=");
         print_size(info.pending_bytes);
         print_text("\n");
+
+        // The line handler will close the connection after this callback when
+        // close_on_limit is true. The application registry is updated here so
+        // future broadcasts stop targeting the stalled subscriber immediately.
         clients.remove(connection);
     }
 
@@ -150,6 +164,8 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
             return;
         }
 
+        // Writes are queued by the TCP backend. The library backpressure monitor
+        // detects subscribers whose queued output grows beyond the configured limit.
         clients.for_each([&](ITcpConnection& peer) {
             peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
         });
@@ -157,6 +173,8 @@ struct SignalKCallbacks final : public ITcpLineServerHandler {
     }
 };
 
+// NMEA side: accepts line-delimited NMEA sources, parses MWV, and publishes
+// the converted values through the Signal K side.
 struct NmeaCallbacks final : public ITcpLineServerHandler {
     explicit NmeaCallbacks(SignalKCallbacks& sink) : signalk(sink) {}
 
@@ -185,6 +203,8 @@ struct NmeaCallbacks final : public ITcpLineServerHandler {
     void on_line(ITcpConnection& connection, LineView line) override {
         (void)connection;
 
+        // TcpLineServerHandler strips the line framing; copy it into a mutable
+        // buffer because NmeaTokenizer splits fields in place.
         char text[160];
         line_to_cstr(line, text);
 
@@ -280,6 +300,8 @@ static bool setup_example() {
     }
 #endif
 
+    // Start both listeners. If the second listener cannot start, close the first
+    // so the example never runs in a half-bridged state.
     if (!listen_server(signalk_server, signalk_handler, signalk_port, "Signal K")) {
         return false;
     }

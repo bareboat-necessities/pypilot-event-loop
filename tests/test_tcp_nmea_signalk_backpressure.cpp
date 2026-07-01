@@ -6,6 +6,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/socket.h>
 #include <unistd.h>
 
@@ -36,9 +37,8 @@ using Real = float;
 
 constexpr Real knots_to_m_s = Real(0.514444);
 constexpr Real deg_to_rad = Real(3.14159265358979323846) / Real(180);
-constexpr int max_sentences_before_disconnect = 2048;
-constexpr int backpressure_burst_size = 64;
-constexpr size_t backpressure_limit_bytes = 4096;
+constexpr int max_sentences_before_disconnect = 8192;
+constexpr size_t backpressure_limit_bytes = 1024;
 
 bool view_contains(async_event_loop::JsonView view, const char* needle) {
     const size_t needle_len = std::strlen(needle);
@@ -215,7 +215,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             if (i == 0 && pending > max_first_client_output) {
                 max_first_client_output = pending;
             }
-            if (i == 0 && pending > backpressure_limit_bytes) {
+            if (pending > backpressure_limit_bytes) {
                 std::fprintf(stderr,
                              "backpressure: disconnecting client %d with %zu queued bytes\n",
                              i,
@@ -254,6 +254,10 @@ int connect_client(uint16_t port, bool small_receive_buffer) {
     if (small_receive_buffer) {
         int rcvbuf = 1024;
         assert(setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &rcvbuf, sizeof(rcvbuf)) == 0);
+#ifdef TCP_WINDOW_CLAMP
+        int window_clamp = 1024;
+        assert(setsockopt(fd, IPPROTO_TCP, TCP_WINDOW_CLAMP, &window_clamp, sizeof(window_clamp)) == 0);
+#endif
     }
     sockaddr_in sin{};
     sin.sin_family = AF_INET;
@@ -380,14 +384,9 @@ int main() {
     assert(fast_json.saw_speed_value);
 
     const uint64_t first_update_us = app.data_model.apparent_wind_direction_rad.last_update_us;
-    int sent_for_backpressure = 0;
-    while (sent_for_backpressure < max_sentences_before_disconnect && app.backpressure_disconnects == 0) {
-        for (int burst = 0;
-             burst < backpressure_burst_size && sent_for_backpressure < max_sentences_before_disconnect;
-             ++burst, ++sent_for_backpressure) {
-            write_all(event_loop, nmea_fd, sentence);
-        }
-        pump(event_loop);
+    for (int i = 0; i < max_sentences_before_disconnect && app.backpressure_disconnects == 0; ++i) {
+        write_all(event_loop, nmea_fd, sentence);
+        pump(event_loop, 2);
         drain_json_client(fast_fd, fast_json);
         drain_plain_client(nmea_fd);
     }
@@ -395,6 +394,8 @@ int main() {
     assert(app.backpressure_error_logged);
     assert(app.max_first_client_output > backpressure_limit_bytes);
     assert(app.connections[0] == nullptr);
+    assert(app.connections[1] != nullptr);
+    assert(app.connections[2] != nullptr);
     assert(app.data_model.apparent_wind_direction_rad.last_update_us >= first_update_us);
     assert(app.data_model.apparent_wind_speed_m_s.last_update_us >= first_update_us);
 

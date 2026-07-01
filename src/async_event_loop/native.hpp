@@ -22,6 +22,7 @@ namespace async_event_loop {
 using NativeClock = LinuxMonotonicClock;
 using NativeScheduler = LinuxLibeventLoop;
 
+/** N is unused on Linux; scheduler capacity is unbounded and heap-backed. */
 template<size_t>
 using NativeSchedulerFor = LinuxLibeventLoop;
 } // namespace async_event_loop

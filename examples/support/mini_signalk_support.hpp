@@ -6,6 +6,7 @@
 #include <iostream>
 #endif
 
+#include <stdarg.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -53,60 +54,13 @@ inline void print_line(const char* text) {
     print_text("\n");
 }
 
-inline void print_label_line(const char* label, const char* suffix) {
-    print_text(label);
-    print_text(suffix);
-    print_text("\n");
-}
-
-inline void print_port_line(const char* prefix, uint16_t port, const char* suffix = "") {
-    print_text(prefix);
-    print_number(port);
-    print_text(suffix);
-    print_text("\n");
-}
-
-inline void print_listening_line(const char* label, uint16_t port) {
-    print_text(label);
-    print_text(" listening on port ");
-    print_number(port);
-    print_text("\n");
-}
-
-inline void print_peer_active_line(const char* prefix, const char* host, uint16_t port, size_t active) {
-    print_text(prefix);
-    print_text(host ? host : "");
-    print_text(":");
-    print_number(port);
-    print_text(" active=");
-    print_size(active);
-    print_text("\n");
-}
-
-inline void print_active_line(const char* prefix, size_t active) {
-    print_text(prefix);
-    print_size(active);
-    print_text("\n");
-}
-
-inline void print_error_line(const char* prefix, int error_code) {
-    print_text(prefix);
-    print_number(printable_error_code(error_code));
-    print_text("\n");
-}
-
-inline void print_error_active_line(const char* prefix, int error_code, size_t active) {
-    print_text(prefix);
-    print_number(printable_error_code(error_code));
-    print_text(" active=");
-    print_size(active);
-    print_text("\n");
-}
-
-inline void print_pending_line(const char* prefix, size_t pending) {
-    print_text(prefix);
-    print_size(pending);
-    print_text("\n");
+inline void print_format_line(const char* format, ...) {
+    char text[192];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    print_line(text);
 }
 
 template<typename Real = float>
@@ -133,16 +87,6 @@ struct DataModel {
 };
 
 using Real = float;
-
-inline void print_wind_status_line(const DataModel<Real>& model, size_t signalk_clients) {
-    print_text("NMEA MWV update angle_rad=");
-    print_float(model.apparent_wind_direction_rad.value);
-    print_text(" speed_m_s=");
-    print_float(model.apparent_wind_speed_m_s.value);
-    print_text(" SignalK clients=");
-    print_size(signalk_clients);
-    print_text("\n");
-}
 
 class NmeaTokenizer {
 public:

@@ -7,6 +7,7 @@
 #include "async_event_loop/protocol_reader.hpp"
 #include "async_event_loop/tcp.hpp"
 #include "async_event_loop/tcp_backpressure.hpp"
+#include "async_event_loop/tcp_connection_registry.hpp"
 #include "async_event_loop/tcp_line_protocol.hpp"
 #include "async_event_loop/pin_io.hpp"
 #include "async_event_loop/scheduler.hpp"

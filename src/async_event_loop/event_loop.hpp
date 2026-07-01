@@ -165,7 +165,9 @@ public:
                     return EventHandle{};
                 }
                 callback_used_[i] = true;
-                if (!scheduler_.add_one_shot(callback_tasks_[i], clock_.micros() + delay_us)) {
+                const uint64_t now_us = clock_.micros();
+                const uint64_t due_us = delay_us > UINT64_MAX - now_us ? UINT64_MAX : now_us + delay_us;
+                if (!scheduler_.add_one_shot(callback_tasks_[i], due_us)) {
                     release_unregistered(handle);
                     return EventHandle{};
                 }

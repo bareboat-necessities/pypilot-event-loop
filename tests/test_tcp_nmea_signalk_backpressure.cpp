@@ -155,7 +155,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
 
     async_event_loop::EventLoop<>& event_loop;
     DataModel<Real> data_model;
-    async_event_loop::ITcpConnection* connections[8]{};
+    async_event_loop::TcpConnectionRegistry<8> connections;
     int accepted = 0;
     int closed = 0;
     int nmea_messages = 0;
@@ -167,8 +167,8 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
     void on_accept(async_event_loop::ITcpConnection& connection,
                    const async_event_loop::TcpPeerInfo& peer) override {
         (void)peer;
-        assert(accepted < static_cast<int>(sizeof(connections) / sizeof(connections[0])));
-        connections[accepted++] = &connection;
+        assert(connections.add(connection));
+        ++accepted;
     }
 
     void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
@@ -203,14 +203,10 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             static_cast<double>(data_model.apparent_wind_speed_m_s.value));
         assert(len > 0 && len < static_cast<int>(sizeof(json)));
 
-        for (int i = 0; i < accepted; ++i) {
-            async_event_loop::ITcpConnection* peer = connections[i];
-            if (!peer || !peer->valid()) {
-                continue;
-            }
-            const int written = peer->write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+        connections.for_each([&](async_event_loop::ITcpConnection& peer) {
+            const int written = peer.write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
             assert(written == len);
-        }
+        });
         ++json_broadcasts;
     }
 
@@ -221,7 +217,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
                      info.pending_bytes);
         backpressure_error_logged = true;
         ++backpressure_disconnects;
-        if (connections[0] == &connection && info.pending_bytes > max_first_client_output) {
+        if (connections.at(0) == &connection && info.pending_bytes > max_first_client_output) {
             max_first_client_output = info.pending_bytes;
         }
         mark_closed(connection);
@@ -238,11 +234,7 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
 
     void mark_closed(async_event_loop::ITcpConnection& connection) {
         ++closed;
-        for (int i = 0; i < accepted; ++i) {
-            if (connections[i] == &connection) {
-                connections[i] = nullptr;
-            }
-        }
+        connections.remove(connection);
     }
 };
 
@@ -328,6 +320,7 @@ void wait_for_accepts(async_event_loop::EventLoop<>& event_loop,
         pump(event_loop);
     }
     assert(app.accepted == expected);
+    assert(app.connections.size() == static_cast<size_t>(expected));
 }
 
 void wait_for_json(async_event_loop::EventLoop<>& event_loop,
@@ -397,9 +390,9 @@ int main() {
     assert(app.backpressure_disconnects == 1);
     assert(app.backpressure_error_logged);
     assert(app.max_first_client_output > backpressure_limit_bytes);
-    assert(app.connections[0] == nullptr);
-    assert(app.connections[1] != nullptr);
-    assert(app.connections[2] != nullptr);
+    assert(app.connections.at(0) == nullptr);
+    assert(app.connections.at(1) != nullptr);
+    assert(app.connections.at(2) != nullptr);
     assert(app.data_model.apparent_wind_direction_rad.last_update_us >= first_update_us);
     assert(app.data_model.apparent_wind_speed_m_s.last_update_us >= first_update_us);
 

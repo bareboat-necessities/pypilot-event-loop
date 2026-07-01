@@ -20,6 +20,8 @@ public:
         close();
         client_ = client;
         active_ = true;
+        tx_head_ = 0;
+        tx_size_ = 0;
         update_peer();
         return valid();
     }
@@ -36,11 +38,13 @@ public:
         }
         active_ = false;
         line_size_ = 0;
+        tx_head_ = 0;
+        tx_size_ = 0;
     }
 
     const TcpPeerInfo& peer() const override { return peer_; }
     size_t input_size() const override { return active_ ? static_cast<size_t>(client_.available()) : 0; }
-    size_t output_size() const override { return 0; }
+    size_t output_size() const override { return tx_size_; }
 
     int read(uint8_t* dst, size_t max_len) override {
         if (!active_ || !dst || max_len == 0) {
@@ -61,7 +65,47 @@ public:
         if (!active_ || !src || len == 0) {
             return 0;
         }
-        return static_cast<int>(client_.write(src, len));
+        flush_output();
+        return static_cast<int>(push_output(src, len));
+    }
+
+    size_t flush_output() {
+        if (!active_ || tx_size_ == 0) {
+            return 0;
+        }
+
+        size_t flushed = 0;
+        while (tx_size_ > 0 && client_.connected()) {
+            size_t n = contiguous_output_size();
+            if (n == 0) {
+                break;
+            }
+
+#if defined(ESP32) || defined(ESP8266)
+            const int writable = client_.availableForWrite();
+            if (writable <= 0) {
+                break;
+            }
+            if (n > static_cast<size_t>(writable)) {
+                n = static_cast<size_t>(writable);
+            }
+#else
+            if (n > tx_flush_chunk) {
+                n = tx_flush_chunk;
+            }
+#endif
+
+            const size_t written = client_.write(tx_ + tx_head_, n);
+            if (written == 0) {
+                break;
+            }
+            pop_output(written);
+            flushed += written;
+            if (written < n) {
+                break;
+            }
+        }
+        return flushed;
     }
 
     static constexpr size_t max_peek_size() { return 1; }
@@ -123,6 +167,55 @@ public:
     }
 
 private:
+    static constexpr size_t tx_capacity = 1024;
+    static constexpr size_t tx_flush_chunk = 64;
+
+    size_t tx_tail() const {
+        return (tx_head_ + tx_size_) % tx_capacity;
+    }
+
+    size_t tx_free() const {
+        return tx_capacity - tx_size_;
+    }
+
+    size_t contiguous_output_size() const {
+        if (tx_size_ == 0) {
+            return 0;
+        }
+        const size_t until_end = tx_capacity - tx_head_;
+        return tx_size_ < until_end ? tx_size_ : until_end;
+    }
+
+    size_t push_output(const uint8_t* src, size_t len) {
+        size_t pushed = 0;
+        while (pushed < len && tx_free() > 0) {
+            const size_t tail = tx_tail();
+            size_t contiguous_free = tx_capacity - tail;
+            if (contiguous_free > tx_free()) {
+                contiguous_free = tx_free();
+            }
+            size_t n = len - pushed;
+            if (n > contiguous_free) {
+                n = contiguous_free;
+            }
+            memcpy(tx_ + tail, src + pushed, n);
+            tx_size_ += n;
+            pushed += n;
+        }
+        return pushed;
+    }
+
+    void pop_output(size_t len) {
+        if (len > tx_size_) {
+            len = tx_size_;
+        }
+        tx_head_ = (tx_head_ + len) % tx_capacity;
+        tx_size_ -= len;
+        if (tx_size_ == 0) {
+            tx_head_ = 0;
+        }
+    }
+
     void update_peer() {
         peer_ = TcpPeerInfo{};
         IPAddress ip = client_.remoteIP();
@@ -136,6 +229,9 @@ private:
     TcpPeerInfo peer_;
     char line_[256]{};
     size_t line_size_ = 0;
+    uint8_t tx_[tx_capacity]{};
+    size_t tx_head_ = 0;
+    size_t tx_size_ = 0;
 };
 
 class ArduinoWiFiTcpServer final : public IRuntimeTask {
@@ -228,6 +324,9 @@ private:
             if (!connection.valid()) {
                 continue;
             }
+            if (connection.flush_output() > 0) {
+                handler_->on_write_ready(connection);
+            }
             if (connection.input_size() > 0) {
                 handler_->on_data(connection);
             }
@@ -291,6 +390,9 @@ public:
     void poll(uint64_t) override {
         if (!handler_ || !connection_.valid()) {
             return;
+        }
+        if (connection_.flush_output() > 0) {
+            handler_->on_write_ready(connection_);
         }
         if (connection_.input_size() > 0) {
             handler_->on_data(connection_);

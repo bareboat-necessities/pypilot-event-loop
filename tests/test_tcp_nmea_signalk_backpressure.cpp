@@ -37,7 +37,8 @@ using Real = float;
 constexpr Real knots_to_m_s = Real(0.514444);
 constexpr Real deg_to_rad = Real(3.14159265358979323846) / Real(180);
 constexpr int max_sentences_before_disconnect = 2048;
-constexpr size_t backpressure_limit_bytes = 32768;
+constexpr int backpressure_burst_size = 64;
+constexpr size_t backpressure_limit_bytes = 4096;
 
 bool view_contains(async_event_loop::JsonView view, const char* needle) {
     const size_t needle_len = std::strlen(needle);
@@ -379,9 +380,14 @@ int main() {
     assert(fast_json.saw_speed_value);
 
     const uint64_t first_update_us = app.data_model.apparent_wind_direction_rad.last_update_us;
-    for (int i = 0; i < max_sentences_before_disconnect && app.backpressure_disconnects == 0; ++i) {
-        write_all(event_loop, nmea_fd, sentence);
-        pump(event_loop, 2);
+    int sent_for_backpressure = 0;
+    while (sent_for_backpressure < max_sentences_before_disconnect && app.backpressure_disconnects == 0) {
+        for (int burst = 0;
+             burst < backpressure_burst_size && sent_for_backpressure < max_sentences_before_disconnect;
+             ++burst, ++sent_for_backpressure) {
+            write_all(event_loop, nmea_fd, sentence);
+        }
+        pump(event_loop);
         drain_json_client(fast_fd, fast_json);
         drain_plain_client(nmea_fd);
     }

@@ -27,7 +27,7 @@ struct TcpBackpressureOptions {
     static TcpBackpressureOptions embedded_default() {
         TcpBackpressureOptions options;
         options.enabled = true;
-        options.high_water_bytes = 1024;
+        options.high_water_bytes = 768;
         options.low_water_bytes = 256;
         options.max_over_high_polls = 2;
         return options;

@@ -71,9 +71,10 @@ struct JsonCapture {
           }) {}
 };
 
-bool parse_mwv(async_event_loop::LineView line, DataModel<Real>& model, uint64_t now_us) {
-    char text[128];
-    async_event_loop::line_to_cstr(line, text);
+bool parse_mwv(char* text, DataModel<Real>& model, uint64_t now_us) {
+    if (!text) {
+        return false;
+    }
 
     char* fields[8]{};
     int field_count = 0;
@@ -142,8 +143,12 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
 
     void on_line(async_event_loop::ITcpConnection& connection, async_event_loop::LineView line) override {
         (void)connection;
+
+        char text[128];
+        async_event_loop::line_to_cstr(line, text);
+
         const uint64_t now_us = event_loop.clock().micros();
-        if (!parse_mwv(line, data_model, now_us)) {
+        if (!parse_mwv(text, data_model, now_us)) {
             return;
         }
         assert(data_model.apparent_wind_direction_rad.valid);

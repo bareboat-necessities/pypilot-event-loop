@@ -157,7 +157,6 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
     DataModel<Real> data_model;
     async_event_loop::TcpConnectionRegistry<8> connections;
     int accepted = 0;
-    int closed = 0;
     int nmea_messages = 0;
     int json_broadcasts = 0;
     int backpressure_disconnects = 0;
@@ -220,20 +219,15 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
         if (connections.at(0) == &connection && info.pending_bytes > max_first_client_output) {
             max_first_client_output = info.pending_bytes;
         }
-        mark_closed(connection);
+        connections.remove(connection);
     }
 
     void on_close(async_event_loop::ITcpConnection& connection) override {
-        mark_closed(connection);
+        connections.remove(connection);
     }
 
     void on_error(async_event_loop::ITcpConnection& connection, int error_code) override {
         std::fprintf(stderr, "connection error: %d\n", error_code);
-        mark_closed(connection);
-    }
-
-    void mark_closed(async_event_loop::ITcpConnection& connection) {
-        ++closed;
         connections.remove(connection);
     }
 };

@@ -210,23 +210,21 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
             }
             const int written = peer->write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
             assert(written == len);
-
-            const size_t pending = peer->output_size();
-            if (i == 0 && pending > max_first_client_output) {
-                max_first_client_output = pending;
-            }
-            if (pending > backpressure_limit_bytes) {
-                std::fprintf(stderr,
-                             "backpressure: disconnecting client %d with %zu queued bytes\n",
-                             i,
-                             pending);
-                backpressure_error_logged = true;
-                ++backpressure_disconnects;
-                peer->close();
-                connections[i] = nullptr;
-            }
         }
         ++json_broadcasts;
+    }
+
+    void on_backpressure(async_event_loop::ITcpConnection& connection,
+                         const async_event_loop::TcpBackpressureInfo& info) override {
+        std::fprintf(stderr,
+                     "backpressure: disconnecting client with %zu queued bytes\n",
+                     info.pending_bytes);
+        backpressure_error_logged = true;
+        ++backpressure_disconnects;
+        if (connections[0] == &connection && info.pending_bytes > max_first_client_output) {
+            max_first_client_output = info.pending_bytes;
+        }
+        mark_closed(connection);
     }
 
     void on_close(async_event_loop::ITcpConnection& connection) override {
@@ -350,7 +348,13 @@ int main() {
     assert(event_loop.valid());
 
     WindSignalKServer app(event_loop);
-    async_event_loop::TcpLineServerHandler<160, 8> line_server(app);
+    async_event_loop::TcpLineServerOptions line_options;
+    line_options.backpressure.enabled = true;
+    line_options.backpressure.high_water_bytes = backpressure_limit_bytes;
+    line_options.backpressure.low_water_bytes = 256;
+    line_options.backpressure.max_over_high_polls = 1;
+    line_options.backpressure.close_on_limit = true;
+    async_event_loop::TcpLineServerHandler<160, 8> line_server(app, line_options);
     async_event_loop::NativeTcpServer server(event_loop.scheduler());
 
     async_event_loop::TcpListenOptions options;

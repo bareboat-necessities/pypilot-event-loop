@@ -60,17 +60,27 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
     async_event_loop::EventLoop<>& event_loop;
     DataModel<Real> data_model;
     async_event_loop::TcpConnectionRegistry<8> connections;
+    async_event_loop::ITcpConnection* slow_connection = nullptr;
+    async_event_loop::ITcpConnection* healthy_connection_a = nullptr;
+    async_event_loop::ITcpConnection* healthy_connection_b = nullptr;
     int accepted = 0;
     int nmea_messages = 0;
     int json_broadcasts = 0;
     int backpressure_disconnects = 0;
     bool backpressure_error_logged = false;
-    size_t max_first_client_output = 0;
+    size_t max_slow_client_output = 0;
 
     void on_accept(async_event_loop::ITcpConnection& connection,
                    const async_event_loop::TcpPeerInfo& peer) override {
         (void)peer;
         assert(connections.add(connection));
+        if (accepted == 0) {
+            slow_connection = &connection;
+        } else if (!healthy_connection_a) {
+            healthy_connection_a = &connection;
+        } else if (!healthy_connection_b) {
+            healthy_connection_b = &connection;
+        }
         ++accepted;
     }
 
@@ -120,8 +130,8 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
                      info.pending_bytes);
         backpressure_error_logged = true;
         ++backpressure_disconnects;
-        if (connections.at(0) == &connection && info.pending_bytes > max_first_client_output) {
-            max_first_client_output = info.pending_bytes;
+        if (slow_connection == &connection && info.pending_bytes > max_slow_client_output) {
+            max_slow_client_output = info.pending_bytes;
         }
         connections.remove(connection);
     }
@@ -256,9 +266,14 @@ int main() {
     assert(server.port() != 0);
 
     const int slow_fd = connect_client(server.port(), true);
+    wait_for_accepts(event_loop, app, 1);
+    assert(app.slow_connection != nullptr);
+
     const int fast_fd = connect_client(server.port(), false);
     const int nmea_fd = connect_client(server.port(), false);
     wait_for_accepts(event_loop, app, 3);
+    assert(app.healthy_connection_a != nullptr);
+    assert(app.healthy_connection_b != nullptr);
     assert(server.connection_count() == 3);
 
     JsonCapture fast_json;
@@ -287,10 +302,10 @@ int main() {
     }
     assert(app.backpressure_disconnects == 1);
     assert(app.backpressure_error_logged);
-    assert(app.max_first_client_output > backpressure_limit_bytes);
-    assert(app.connections.at(0) == nullptr);
-    assert(app.connections.at(1) != nullptr);
-    assert(app.connections.at(2) != nullptr);
+    assert(app.max_slow_client_output > backpressure_limit_bytes);
+    assert(!app.connections.contains(*app.slow_connection));
+    assert(app.connections.contains(*app.healthy_connection_a));
+    assert(app.connections.contains(*app.healthy_connection_b));
     assert(app.data_model.apparent_wind_direction_rad.last_update_us >= first_update_us);
     assert(app.data_model.apparent_wind_speed_m_s.last_update_us >= first_update_us);
 

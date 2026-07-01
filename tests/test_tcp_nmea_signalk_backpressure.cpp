@@ -14,7 +14,8 @@ namespace {
 
 constexpr double knots_to_m_s = 0.514444;
 constexpr double deg_to_rad = 3.14159265358979323846 / 180.0;
-constexpr int repeated_sentences = 768;
+constexpr int max_sentences_before_disconnect = 2048;
+constexpr size_t backpressure_limit_bytes = 32768;
 
 bool view_contains(async_event_loop::JsonView view, const char* needle) {
     const size_t needle_len = std::strlen(needle);
@@ -99,8 +100,11 @@ bool parse_mwv(async_event_loop::LineView line, double& angle_rad, double& speed
 struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler {
     async_event_loop::ITcpConnection* connections[8]{};
     int accepted = 0;
+    int closed = 0;
     int nmea_messages = 0;
     int json_broadcasts = 0;
+    int backpressure_disconnects = 0;
+    bool backpressure_error_logged = false;
     size_t max_first_client_output = 0;
 
     void on_accept(async_event_loop::ITcpConnection& connection,
@@ -132,18 +136,46 @@ struct WindSignalKServer final : public async_event_loop::ITcpLineServerHandler 
 
         for (int i = 0; i < accepted; ++i) {
             async_event_loop::ITcpConnection* peer = connections[i];
-            if (peer && peer->valid()) {
-                const int written = peer->write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
-                assert(written == len);
+            if (!peer || !peer->valid()) {
+                continue;
             }
-        }
-        if (connections[0]) {
-            const size_t pending = connections[0]->output_size();
-            if (pending > max_first_client_output) {
+            const int written = peer->write(reinterpret_cast<const uint8_t*>(json), static_cast<size_t>(len));
+            assert(written == len);
+
+            const size_t pending = peer->output_size();
+            if (i == 0 && pending > max_first_client_output) {
                 max_first_client_output = pending;
+            }
+            if (pending > backpressure_limit_bytes) {
+                std::fprintf(stderr,
+                             "backpressure: disconnecting client %d with %zu queued bytes\n",
+                             i,
+                             pending);
+                backpressure_error_logged = true;
+                ++backpressure_disconnects;
+                peer->close();
+                connections[i] = nullptr;
             }
         }
         ++json_broadcasts;
+    }
+
+    void on_close(async_event_loop::ITcpConnection& connection) override {
+        mark_closed(connection);
+    }
+
+    void on_error(async_event_loop::ITcpConnection& connection, int error_code) override {
+        std::fprintf(stderr, "connection error: %d\n", error_code);
+        mark_closed(connection);
+    }
+
+    void mark_closed(async_event_loop::ITcpConnection& connection) {
+        ++closed;
+        for (int i = 0; i < accepted; ++i) {
+            if (connections[i] == &connection) {
+                connections[i] = nullptr;
+            }
+        }
     }
 };
 
@@ -168,6 +200,21 @@ int connect_client(uint16_t port, bool small_receive_buffer) {
 void pump(async_event_loop::EventLoop<>& event_loop, int iterations = 1) {
     for (int i = 0; i < iterations; ++i) {
         event_loop.run_once();
+    }
+}
+
+void drain_plain_client(int fd) {
+    uint8_t buf[1024];
+    for (;;) {
+        const ssize_t n = read(fd, buf, sizeof(buf));
+        if (n > 0) {
+            continue;
+        }
+        if (n == 0) {
+            return;
+        }
+        assert(errno == EAGAIN || errno == EWOULDBLOCK);
+        return;
     }
 }
 
@@ -251,6 +298,7 @@ int main() {
 
     write_all(event_loop, nmea_fd, sentence);
     wait_for_json(event_loop, fast_fd, fast_json, 1);
+    drain_plain_client(nmea_fd);
     assert(app.nmea_messages == 1);
     assert(app.json_broadcasts == 1);
     assert(fast_json.saw_angle_path);
@@ -258,22 +306,30 @@ int main() {
     assert(fast_json.saw_angle_value);
     assert(fast_json.saw_speed_value);
 
-    for (int i = 0; i < repeated_sentences; ++i) {
+    for (int i = 0; i < max_sentences_before_disconnect && app.backpressure_disconnects == 0; ++i) {
         write_all(event_loop, nmea_fd, sentence);
         pump(event_loop, 2);
         drain_json_client(fast_fd, fast_json);
+        drain_plain_client(nmea_fd);
     }
+    assert(app.backpressure_disconnects == 1);
+    assert(app.backpressure_error_logged);
+    assert(app.max_first_client_output > backpressure_limit_bytes);
+    assert(app.connections[0] == nullptr);
 
-    for (int i = 0; i < 10000 && app.json_broadcasts < repeated_sentences + 1; ++i) {
-        pump(event_loop);
+    pump(event_loop, 100);
+    assert(server.connection_count() == 2);
+
+    const int messages_before = fast_json.messages;
+    const int broadcasts_before = app.json_broadcasts;
+    for (int i = 0; i < 8; ++i) {
+        write_all(event_loop, nmea_fd, sentence);
+        pump(event_loop, 2);
         drain_json_client(fast_fd, fast_json);
+        drain_plain_client(nmea_fd);
     }
-    assert(app.json_broadcasts == repeated_sentences + 1);
-
-    wait_for_json(event_loop, fast_fd, fast_json, repeated_sentences + 1);
-    assert(app.connections[0] != nullptr);
-    assert(app.connections[0]->valid());
-    assert(app.connections[0]->output_size() > 0 || app.max_first_client_output > 0);
+    assert(app.json_broadcasts >= broadcasts_before + 8);
+    wait_for_json(event_loop, fast_fd, fast_json, messages_before + 8);
 
     close(nmea_fd);
     close(fast_fd);
